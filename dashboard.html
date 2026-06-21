@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BRONE — ROS 2 Network Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        /* ============================================================ */
+        /*  CSS Variables & Reset                                       */
+        /* ============================================================ */
+        :root {
+            --bg-primary: #0a0a12;
+            --bg-secondary: #12121f;
+            --bg-card: rgba(255, 255, 255, 0.04);
+            --bg-card-hover: rgba(255, 255, 255, 0.07);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-glow: rgba(255, 255, 255, 0.1);
+
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888a0;
+            --text-muted: #555570;
+
+            --accent-hz: #00d4aa;
+            --accent-hz-glow: rgba(0, 212, 170, 0.15);
+            --accent-latency: #ff6b6b;
+            --accent-latency-glow: rgba(255, 107, 107, 0.15);
+            --accent-jitter: #a78bfa;
+            --accent-jitter-glow: rgba(167, 139, 250, 0.15);
+            --accent-total: #38bdf8;
+            --accent-total-glow: rgba(56, 189, 248, 0.15);
+            --accent-min: #34d399;
+            --accent-max: #fb923c;
+
+            --warning-bg: rgba(255, 217, 61, 0.08);
+            --warning-border: rgba(255, 217, 61, 0.3);
+            --warning-text: #ffd93d;
+
+            --status-online: #00d4aa;
+            --status-offline: #ff4757;
+
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ============================================================ */
+        /*  Background Ambient Glow                                     */
+        /* ============================================================ */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -30%;
+            left: -10%;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(0, 212, 170, 0.04) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -20%;
+            right: -10%;
+            width: 50%;
+            height: 50%;
+            background: radial-gradient(circle, rgba(255, 107, 107, 0.03) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ============================================================ */
+        /*  Layout                                                      */
+        /* ============================================================ */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px 28px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ============================================================ */
+        /*  Header                                                      */
+        /* ============================================================ */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, var(--accent-hz), #007a62);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -1px;
+        }
+
+        .header-title h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: var(--text-primary);
+        }
+
+        .header-title p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(0, 212, 170, 0.08);
+            border: 1px solid rgba(0, 212, 170, 0.2);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--status-online);
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.offline {
+            background: rgba(255, 71, 87, 0.08);
+            border-color: rgba(255, 71, 87, 0.2);
+            color: var(--status-offline);
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--status-online);
+            animation: pulse-dot 2s infinite;
+        }
+
+        .status-badge.offline .status-dot {
+            background: var(--status-offline);
+            animation: none;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .topic-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* ============================================================ */
+        /*  Clock Skew Warning Banner                                   */
+        /* ============================================================ */
+        .clock-skew-banner {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 18px;
+            margin-bottom: 20px;
+            border-radius: var(--radius-sm);
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            color: var(--warning-text);
+            font-size: 13px;
+            font-weight: 500;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        .clock-skew-banner.visible {
+            display: flex;
+        }
+
+        .clock-skew-banner .warn-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ============================================================ */
+        /*  Metric Cards                                                */
+        /* ============================================================ */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            border-radius: var(--radius) var(--radius) 0 0;
+            opacity: 0.7;
+        }
+
+        .metric-card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .metric-card.hz::before { background: var(--accent-hz); }
+        .metric-card.avg-lat::before { background: var(--accent-latency); }
+        .metric-card.min-lat::before { background: var(--accent-min); }
+        .metric-card.max-lat::before { background: var(--accent-max); }
+        .metric-card.jitter::before { background: var(--accent-jitter); }
+        .metric-card.total::before { background: var(--accent-total); }
+
+        .metric-label {
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .metric-card.hz .metric-value { color: var(--accent-hz); }
+        .metric-card.avg-lat .metric-value { color: var(--accent-latency); }
+        .metric-card.min-lat .metric-value { color: var(--accent-min); }
+        .metric-card.max-lat .metric-value { color: var(--accent-max); }
+        .metric-card.jitter .metric-value { color: var(--accent-jitter); }
+        .metric-card.total .metric-value { color: var(--accent-total); }
+
+        .metric-unit {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* ============================================================ */
+        /*  Charts                                                      */
+        /* ============================================================ */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .chart-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: border-color 0.25s ease;
+        }
+
+        .chart-panel:hover {
+            border-color: var(--border-glow);
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 260px;
+        }
+
+        /* ============================================================ */
+        /*  Footer                                                      */
+        /* ============================================================ */
+        .footer {
+            text-align: center;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-subtle);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ============================================================ */
+        /*  Responsive                                                  */
+        /* ============================================================ */
+        @media (max-width: 1100px) {
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 16px; }
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .metric-value { font-size: 22px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- ======== Header ======== -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">B</div>
+                <div class="header-title">
+                    <h1>ROS 2 Network Monitor</h1>
+                    <p>BRONE Robot — Real-time DDS Performance Dashboard</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <span class="topic-name">/test_topic</span>
+                <div class="status-badge offline" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Menunggu data…</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ======== Clock Skew Warning ======== -->
+        <div class="clock-skew-banner" id="clockSkewBanner">
+            <span class="warn-icon">⚠️</span>
+            <span>
+                <strong>Clock Skew Terdeteksi!</strong> Ditemukan
+                <span id="negativeCount">0</span> pesan dengan latency negatif.
+                Sinkronkan jam antar mesin menggunakan <code>chrony</code> atau <code>ntpdate</code>.
+                Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
+            </span>
+        </div>
+
+        <!-- ======== Metric Cards ======== -->
+        <div class="metrics-grid">
+            <div class="metric-card hz">
+                <div class="metric-label">Frekuensi</div>
+                <div class="metric-value" id="valHz">—</div>
+                <div class="metric-unit">Hz</div>
+            </div>
+            <div class="metric-card avg-lat">
+                <div class="metric-label">Avg Latency</div>
+                <div class="metric-value" id="valAvgLat">—</div>
+                <div class="metric-unit">ms</div>
+            </div>
+            <div class="metric-card min-lat">
+                <div class="metric-label">Min Latency</div>
+                <div class="metric-value" id="valMinLat">—</div>
+                <div class="metric-unit">ms</div>
+            </div>
+            <div class="metric-card max-lat">
+                <div class="metric-label">Max Latency</div>
+                <div class="metric-value" id="valMaxLat">—</div>
+                <div class="metric-unit">ms</div>
+            </div>
+            <div class="metric-card jitter">
+                <div class="metric-label">Jitter (Std)</div>
+                <div class="metric-value" id="valJitter">—</div>
+                <div class="metric-unit">ms</div>
+            </div>
+            <div class="metric-card total">
+                <div class="metric-label">Total Pesan</div>
+                <div class="metric-value" id="valTotal">—</div>
+                <div class="metric-unit">diterima</div>
+            </div>
+        </div>
+
+        <!-- ======== Charts ======== -->
+        <div class="charts-grid">
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">📈 Frekuensi (Hz)</span>
+                    <span class="chart-subtitle">2 menit terakhir</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartHz"></canvas>
+                </div>
+            </div>
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">📊 Latency (ms)</span>
+                    <span class="chart-subtitle">avg / min / max</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartLatency"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======== Footer ======== -->
+        <footer class="footer">
+            BRONE Network Monitor • CycloneDDS • ROS_DOMAIN_ID=30 •
+            Polling setiap 1 detik
+        </footer>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  JavaScript: Polling + Chart.js                               -->
+    <!-- ============================================================ -->
+    <script>
+        // ============================================================
+        //  Chart.js Global Config
+        // ============================================================
+        Chart.defaults.color = '#8888a0';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.size = 11;
+
+        const MAX_POINTS = 120;
+
+        // ============================================================
+        //  Hz Chart
+        // ============================================================
+        const ctxHz = document.getElementById('chartHz').getContext('2d');
+        const chartHz = new Chart(ctxHz, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Hz',
+                    data: [],
+                    borderColor: '#00d4aa',
+                    backgroundColor: 'rgba(0, 212, 170, 0.08)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHitRadius: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        ticks: { callback: v => v + ' Hz' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1a1a2e',
+                        titleColor: '#e8e8f0',
+                        bodyColor: '#00d4aa',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => `${ctx.parsed.y.toFixed(2)} Hz`
+                        }
+                    }
+                }
+            }
+        });
+
+        // ============================================================
+        //  Latency Chart
+        // ============================================================
+        const ctxLat = document.getElementById('chartLatency').getContext('2d');
+        const chartLatency = new Chart(ctxLat, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Avg',
+                        data: [],
+                        borderColor: '#ff6b6b',
+                        backgroundColor: 'rgba(255, 107, 107, 0.06)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Min',
+                        data: [],
+                        borderColor: '#34d399',
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Max',
+                        data: [],
+                        borderColor: '#fb923c',
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        ticks: { callback: v => v.toFixed(1) + ' ms' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: {
+                            boxWidth: 10,
+                            boxHeight: 2,
+                            usePointStyle: false,
+                            padding: 14,
+                            font: { size: 11 }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1a2e',
+                        titleColor: '#e8e8f0',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)} ms`
+                        }
+                    }
+                }
+            }
+        });
+
+        // ============================================================
+        //  DOM References
+        // ============================================================
+        const valHz       = document.getElementById('valHz');
+        const valAvgLat   = document.getElementById('valAvgLat');
+        const valMinLat   = document.getElementById('valMinLat');
+        const valMaxLat   = document.getElementById('valMaxLat');
+        const valJitter   = document.getElementById('valJitter');
+        const valTotal    = document.getElementById('valTotal');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusText  = document.getElementById('statusText');
+        const clockBanner = document.getElementById('clockSkewBanner');
+        const negCount    = document.getElementById('negativeCount');
+
+        let lastTotal = 0;
+        let failCount = 0;
+
+        // ============================================================
+        //  Format time label from epoch
+        // ============================================================
+        function timeLabel(epoch) {
+            const d = new Date(epoch * 1000);
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const ss = String(d.getSeconds()).padStart(2, '0');
+            return `${mm}:${ss}`;
+        }
+
+        // ============================================================
+        //  Poll API every 1 second
+        // ============================================================
+        async function poll() {
+            try {
+                const res = await fetch('/api/stats');
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                failCount = 0;
+                update(data);
+            } catch (e) {
+                failCount++;
+                if (failCount > 3) {
+                    statusBadge.className = 'status-badge offline';
+                    statusText.textContent = 'Koneksi terputus';
+                }
+            }
+        }
+
+        function update(data) {
+            const c = data.current;
+            const h = data.history;
+
+            // -- Status badge --
+            const receiving = c.total > lastTotal;
+            lastTotal = c.total;
+
+            if (receiving) {
+                statusBadge.className = 'status-badge';
+                statusText.textContent = 'Menerima data';
+            } else if (c.total === 0) {
+                statusBadge.className = 'status-badge offline';
+                statusText.textContent = 'Menunggu data…';
+            } else {
+                statusBadge.className = 'status-badge offline';
+                statusText.textContent = 'Data berhenti';
+            }
+
+            // -- Metric cards --
+            valHz.textContent     = c.hz.toFixed(1);
+            valAvgLat.textContent = c.avg_lat.toFixed(2);
+            valMinLat.textContent = c.min_lat.toFixed(2);
+            valMaxLat.textContent = c.max_lat.toFixed(2);
+            valJitter.textContent = c.std_lat.toFixed(2);
+            valTotal.textContent  = c.total.toLocaleString();
+
+            // -- Clock skew warning --
+            if (c.clock_skew) {
+                clockBanner.classList.add('visible');
+                negCount.textContent = c.negative_count;
+            }
+
+            // -- Charts (rebuild from history) --
+            if (h && h.length > 0) {
+                const labels  = h.map(p => timeLabel(p.timestamp));
+                const hzData  = h.map(p => p.hz);
+                const avgData = h.map(p => p.avg_lat);
+                const minData = h.map(p => p.min_lat);
+                const maxData = h.map(p => p.max_lat);
+
+                chartHz.data.labels = labels;
+                chartHz.data.datasets[0].data = hzData;
+                chartHz.update('none');
+
+                chartLatency.data.labels = labels;
+                chartLatency.data.datasets[0].data = avgData;
+                chartLatency.data.datasets[1].data = minData;
+                chartLatency.data.datasets[2].data = maxData;
+                chartLatency.update('none');
+            }
+        }
+
+        // Start polling
+        setInterval(poll, 1000);
+        poll(); // Initial fetch
+    </script>
+</body>
+</html>

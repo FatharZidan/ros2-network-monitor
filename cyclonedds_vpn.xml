@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  CycloneDDS Config untuk koneksi VPN (ZeroTier)
+
+  INSTRUKSI:
+  1. Ganti IP di <NetworkInterface> dengan IP ZeroTier MESIN INI
+  2. Ganti IP di <Peer> dengan IP ZeroTier mesin TUJUAN
+
+  Contoh penggunaan di NUC:
+    NetworkInterface = 10.101.143.111 (IP ZT NUC)
+    Peer = 10.101.x.x (IP ZT Windows)
+
+  Contoh penggunaan di Windows:
+    NetworkInterface = 10.101.x.x (IP ZT Windows)
+    Peer = 10.101.143.111 (IP ZT NUC)
+
+  CATATAN MTU:
+    MaxMessageSize & FragmentSize di-set ke 1400B (bukan 1472B)
+    karena ZeroTier menambahkan ~28 bytes overhead encapsulation.
+    1472 - 28 - safety margin ≈ 1400B.
+-->
+<CycloneDDS xmlns="https://github.com/eclipse-cyclonedds/cyclonedds">
+    <Domain id="any">
+        <General>
+            <Interfaces>
+                <!-- GANTI: IP ZeroTier mesin ini -->
+                <NetworkInterface address="10.101.x.x"/>
+            </Interfaces>
+            <AllowMulticast>false</AllowMulticast>
+            <MaxMessageSize>1400B</MaxMessageSize>
+            <FragmentSize>1400B</FragmentSize>
+        </General>
+        <Discovery>
+            <ParticipantIndex>auto</ParticipantIndex>
+            <Peers>
+                <!-- GANTI: IP ZeroTier mesin tujuan -->
+                <Peer address="10.101.x.x"/>
+            </Peers>
+        </Discovery>
+    </Domain>
+</CycloneDDS>
