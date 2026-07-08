@@ -41,6 +41,13 @@
             --status-online: #00d4aa;
             --status-offline: #ff4757;
 
+            --cuda-on-bg: rgba(0, 212, 170, 0.08);
+            --cuda-on-border: rgba(0, 212, 170, 0.25);
+            --cuda-on-text: #00d4aa;
+            --cuda-off-bg: rgba(255, 71, 87, 0.08);
+            --cuda-off-border: rgba(255, 71, 87, 0.25);
+            --cuda-off-text: #ff4757;
+
             --radius: 16px;
             --radius-sm: 10px;
         }
@@ -194,6 +201,38 @@
             padding: 5px 12px;
             border-radius: 6px;
             border: 1px solid var(--border-subtle);
+        }
+
+        /* ============================================================ */
+        /*  CUDA Status Badge                                           */
+        /* ============================================================ */
+        .cuda-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .cuda-badge.on {
+            background: var(--cuda-on-bg);
+            border: 1px solid var(--cuda-on-border);
+            color: var(--cuda-on-text);
+        }
+
+        .cuda-badge.off {
+            background: var(--cuda-off-bg);
+            border: 1px solid var(--cuda-off-border);
+            color: var(--cuda-off-text);
+        }
+
+        .cuda-icon {
+            font-size: 10px;
         }
 
         /* ============================================================ */
@@ -385,11 +424,25 @@
                 <div class="logo">B</div>
                 <div class="header-title">
                     <h1>ROS 2 Network Monitor</h1>
+                    <div style="text-align: center; margin-bottom: 20px; background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                    <label for="skenario" style="font-weight: bold; font-size: 1.2em; color: #333;">Informasi Pengujian: </label>
+                    <select id="skenario" style="font-size: 1.1em; padding: 5px 10px; border-radius: 5px; cursor: pointer;">
+                        <option value="1">Pilih Skenario...</option>
+                        <option value="2">🟢 Baseline Level 2 (JETSON Internal Murni)</option>
+                        <option value="3">🔵 Baseline Level 2 (NUC Internal Murni)</option>
+                        <option value="4">🚀 Skenario A (Lintas Mesin: JETSON ➔ NUC)</option>
+                        <option value="5">🚀 Skenario A (Lintas Mesin: NUC ➔ JETSON)</option>
+                    </select>
+                </div>
                     <p>BRONE Robot — Real-time DDS Performance Dashboard</p>
                 </div>
             </div>
             <div class="header-right">
                 <span class="topic-name">/test_topic</span>
+                <div class="cuda-badge off" id="cudaBadge">
+                    <span class="cuda-icon">⬢</span>
+                    <span id="cudaText">CUDA: OFF</span>
+                </div>
                 <div class="status-badge offline" id="statusBadge">
                     <span class="status-dot"></span>
                     <span id="statusText">Menunggu data…</span>
@@ -637,6 +690,8 @@
         const statusText  = document.getElementById('statusText');
         const clockBanner = document.getElementById('clockSkewBanner');
         const negCount    = document.getElementById('negativeCount');
+        const cudaBadge   = document.getElementById('cudaBadge');
+        const cudaText    = document.getElementById('cudaText');
 
         let lastTotal = 0;
         let failCount = 0;
@@ -701,6 +756,15 @@
             if (c.clock_skew) {
                 clockBanner.classList.add('visible');
                 negCount.textContent = c.negative_count;
+            }
+
+            // -- CUDA status badge --
+            if (c.cuda_active) {
+                cudaBadge.className = 'cuda-badge on';
+                cudaText.textContent = 'CUDA: ON';
+            } else {
+                cudaBadge.className = 'cuda-badge off';
+                cudaText.textContent = 'CUDA: OFF';
             }
 
             // -- Charts (rebuild from history) --

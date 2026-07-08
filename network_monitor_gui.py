@@ -74,6 +74,7 @@ class MonitorNode(Node):
         self._total_received: int = 0
         self._negative_count: int = 0
         self._clock_skew_warned: bool = False
+        self._cuda_active: bool = False     # Status CUDA dari publisher
 
         # --- Data terbaru & history (thread-safe via GIL untuk reads) ---
         self._lock = threading.Lock()
@@ -89,6 +90,7 @@ class MonitorNode(Node):
             "negative_count": 0,
             "elapsed": 0.0,
             "timestamp": time.time(),
+            "cuda_active": False,
         }
         self._history: deque = deque(maxlen=self.HISTORY_MAX)
 
@@ -120,6 +122,9 @@ class MonitorNode(Node):
             return
 
         latency_ms: float = (t_recv - t_send) * 1000.0
+
+        # --- Parse status CUDA (default False jika kunci tidak ada) ---
+        self._cuda_active = payload.get("cuda", False)
 
         if latency_ms < 0.0:
             self._negative_count += 1
@@ -170,6 +175,7 @@ class MonitorNode(Node):
             "negative_count": self._negative_count,
             "elapsed": round(elapsed, 3),
             "timestamp": round(now, 3),
+            "cuda_active": self._cuda_active,
         }
 
         with self._lock:
