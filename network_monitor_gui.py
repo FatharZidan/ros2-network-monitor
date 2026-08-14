@@ -15,7 +15,8 @@ from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import ByteMultiArray
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from std_msgs.msg import UInt8MultiArray
 
 
 def get_timestamp_ns(topology: str):
@@ -50,6 +51,7 @@ class MonitorNode(Node):
         self.declare_parameter('report_interval', 1.0)
         self.declare_parameter('http_port', 8765)
         self.declare_parameter('topology', 'nuc2nuc')
+        self.declare_parameter('qos', 'best_effort')
         
         topic_name = self.get_parameter('topic_name').value
         report_interval = self.get_parameter('report_interval').value
@@ -94,7 +96,18 @@ class MonitorNode(Node):
         
         self._history = deque(maxlen=120)
         
-        self.create_subscription(ByteMultiArray, topic_name, self._listener_callback, 10)
+        qos_str = self.get_parameter('qos').value
+        qos_map = {
+            'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
+            'reliable': QoSReliabilityPolicy.RELIABLE,
+        }
+        qos_profile = QoSProfile(
+            reliability=qos_map.get(qos_str, QoSReliabilityPolicy.BEST_EFFORT),
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        
+        self.create_subscription(UInt8MultiArray, topic_name, self._listener_callback, qos_profile)
         self.create_timer(report_interval, self._report_callback)
 
     def _listener_callback(self, msg):

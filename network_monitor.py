@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_msgs.msg import ByteMultiArray
+from std_msgs.msg import UInt8MultiArray
 import argparse
 import struct
 import time
@@ -59,7 +60,7 @@ class NetworkMonitor(Node):
         )
         
         self.subscription = self.create_subscription(
-            ByteMultiArray,
+            UInt8MultiArray,
             '/test_topic',
             self.listener_callback,
             qos_profile

@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from std_msgs.msg import ByteMultiArray
+from std_msgs.msg import UInt8MultiArray
 import argparse
 import struct
 import os
@@ -42,7 +42,7 @@ class DummyPublisher(Node):
             depth=10,
         )
         
-        self.publisher_ = self.create_publisher(ByteMultiArray, '/test_topic', qos_profile)
+        self.publisher_ = self.create_publisher(UInt8MultiArray, '/test_topic', qos_profile)
         
         timer_period = 1.0 / self.args.freq
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -91,7 +91,7 @@ class DummyPublisher(Node):
         header = struct.pack('!Qq', self.seq, ts_ns)
         payload_bytes = header + os.urandom(padding_size)
         
-        msg = ByteMultiArray()
+        msg = UInt8MultiArray()
         msg.data = list(payload_bytes)
         
         self.publisher_.publish(msg)
