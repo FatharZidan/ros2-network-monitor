@@ -1,185 +1,203 @@
-#!/usr/bin/env python3
-"""
-network_monitor.py — ROS 2 Network Performance Monitor
-
-Subscribe ke /test_topic, mengekstrak timestamp dari payload,
-lalu setiap 1 detik mencetak statistik:
-  • Frekuensi aktual (Hz)
-  • Total pesan diterima pada jendela tersebut
-  • Rata-rata Latency (ms)
-  • Min / Max Latency (ms)
-
-Penggunaan:
-    ros2 run <package_name> network_monitor
-    — atau —
-    python3 network_monitor.py
-"""
-
-import time
-import json
-import statistics
-from typing import List
-
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from std_msgs.msg import ByteMultiArray
+import argparse
+import struct
+import time
+from datetime import datetime
+import threading
+import csv
+import sys
 
+def get_timestamp_ns(topology: str):
+    """Return timestamp function based on topology."""
+    if topology in ('nuc2nuc', 'jetson2jetson'):
+        return time.perf_counter_ns
+    elif topology in ('nuc2jetson', 'jetson2nuc'):
+        return time.time_ns
+    else:
+        raise ValueError(f"Topology tidak valid: {topology}. Pilihan: nuc2nuc, jetson2jetson, nuc2jetson, jetson2nuc")
+
+def calculate_percentile(data: list, p: float) -> float:
+    if not data:
+        return 0.0
+    sorted_data = sorted(data)
+    n = len(sorted_data)
+    index = (p / 100) * (n - 1)
+    lower = int(index)
+    upper = min(lower + 1, n - 1)
+    fraction = index - lower
+    return sorted_data[lower] + fraction * (sorted_data[upper] - sorted_data[lower])
 
 class NetworkMonitor(Node):
-    """Node subscriber yang mengukur frekuensi & latency dari /test_topic."""
-
-    TOPIC_NAME: str = "/test_topic"
-    QOS_DEPTH: int = 10
-    REPORT_INTERVAL_SEC: float = 1.0   # Interval laporan statistik
-
-    def __init__(self) -> None:
-        super().__init__("network_monitor")
-
-        # --- Parameter ROS 2 ---
-        self.declare_parameter("topic_name", self.TOPIC_NAME)
-        self.declare_parameter("report_interval", self.REPORT_INTERVAL_SEC)
-
-        topic_name: str = (
-            self.get_parameter("topic_name").get_parameter_value().string_value
+    def __init__(self, args, stop_event):
+        super().__init__('network_monitor')
+        self.args = args
+        self.stop_event = stop_event
+        
+        self.ts_func = get_timestamp_ns(self.args.topology)
+        
+        self.warmup_end_time = time.time() + self.args.warmup_seconds
+        
+        self.last_seq = -1
+        self.first_seq = -1
+        self.total_gaps = 0
+        self.valid_samples = 0
+        self.latencies_ms = []
+        
+        self.msg_count_1s = 0
+        
+        qos_map = {
+            'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
+            'reliable': QoSReliabilityPolicy.RELIABLE,
+        }
+        qos_profile = QoSProfile(
+            reliability=qos_map[self.args.qos],
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
         )
-        self._report_interval: float = (
-            self.get_parameter("report_interval").get_parameter_value().double_value
+        
+        self.subscription = self.create_subscription(
+            ByteMultiArray,
+            '/test_topic',
+            self.listener_callback,
+            qos_profile
         )
+        
+        self.report_timer = self.create_timer(1.0, self.report_callback)
+        self.get_logger().info(f"Network Monitor started. Topology: {self.args.topology}, QoS: {self.args.qos}")
 
-        # --- Akumulator statistik per jendela ---
-        self._latencies: List[float] = []      # Latency (ms) per pesan
-        self._msg_count: int = 0                # Jumlah pesan diterima
-        self._window_start: float = time.time() # Awal jendela pengukuran
-        self._total_received: int = 0           # Kumulatif total pesan
-        self._negative_count: int = 0           # Deteksi clock skew
-        self._clock_skew_warned: bool = False   # Sudah pernah warn?
-
-        # --- Subscriber ---
-        self.subscription_ = self.create_subscription(
-            String,
-            topic_name,
-            self._listener_callback,
-            self.QOS_DEPTH,
-        )
-
-        # --- Timer laporan periodik ---
-        self.report_timer_ = self.create_timer(
-            self._report_interval, self._report_callback
-        )
-
-        self.get_logger().info(
-            f"[NetworkMonitor] AKTIF — Topik: {topic_name} "
-            f"| Interval laporan: {self._report_interval:.1f} s"
-        )
-
-    # ------------------------------------------------------------------ #
-    #  Callback: setiap pesan masuk                                       #
-    # ------------------------------------------------------------------ #
-    def _listener_callback(self, msg: String) -> None:
-        """Terima pesan, hitung latency, dan simpan ke akumulator."""
-        t_recv: float = time.time()  # Waktu penerimaan
-
-        try:
-            payload: dict = json.loads(msg.data)
-            t_send: float = payload["stamp"]
-        except (json.JSONDecodeError, KeyError) as exc:
-            self.get_logger().warn(
-                f"[MONITOR] Payload tidak valid, diabaikan: {exc}"
-            )
+    def listener_callback(self, msg):
+        if self.stop_event.is_set():
             return
-
-        latency_ms: float = (t_recv - t_send) * 1000.0  # detik → milidetik
-
-        # --- Deteksi clock skew (latency negatif = jam tidak sinkron) ---
-        if latency_ms < 0.0:
-            self._negative_count += 1
-            if not self._clock_skew_warned:
-                self.get_logger().warn(
-                    "⚠ CLOCK SKEW TERDETEKSI! Latency negatif ditemukan. "
-                    "Jam antar mesin TIDAK sinkron. "
-                    "Jalankan: sudo ntpdate pool.ntp.org ATAU setup chrony. "
-                    "Nilai latency TIDAK DAPAT DIPERCAYA sampai clock sync!"
-                )
-                self._clock_skew_warned = True
-
-        self._latencies.append(latency_ms)
-        self._msg_count += 1
-        self._total_received += 1
-
-    # ------------------------------------------------------------------ #
-    #  Callback: laporan statistik periodik                               #
-    # ------------------------------------------------------------------ #
-    def _report_callback(self) -> None:
-        """Cetak statistik frekuensi & latency setiap interval."""
-        now: float = time.time()
-        elapsed: float = now - self._window_start
-
-        if elapsed <= 0.0:
+            
+        recv_ts = self.ts_func()
+        
+        if time.time() < self.warmup_end_time:
             return
-
-        count: int = self._msg_count
-        hz: float = count / elapsed if elapsed > 0 else 0.0
-
-        # --- Hitung statistik latency ---
-        if self._latencies:
-            avg_lat: float = statistics.mean(self._latencies)
-            min_lat: float = min(self._latencies)
-            max_lat: float = max(self._latencies)
-            std_lat: float = (
-                statistics.stdev(self._latencies) if len(self._latencies) > 1 else 0.0
-            )
+            
+        raw = bytes(msg.data)
+        if len(raw) < 16:
+            return
+            
+        seq, send_ts = struct.unpack('!Qq', raw[:16])
+        
+        latency_ns = recv_ts - send_ts
+        latency_ms = latency_ns / 1_000_000.0
+        
+        self.latencies_ms.append(latency_ms)
+        self.valid_samples += 1
+        self.msg_count_1s += 1
+        
+        if self.last_seq == -1:
+            self.first_seq = seq
+            self.last_seq = seq
         else:
-            avg_lat = min_lat = max_lat = std_lat = 0.0
+            if seq > self.last_seq + 1:
+                self.total_gaps += (seq - self.last_seq - 1)
+            self.last_seq = seq
+            
+        if self.args.samples > 0 and self.valid_samples >= self.args.samples:
+            self.stop_event.set()
 
-        # --- Cetak laporan ---
-        separator = "─" * 60
-        self.get_logger().info(separator)
+    def report_callback(self):
+        if self.stop_event.is_set():
+            return
+            
+        if self.first_seq == -1:
+            return
+            
+        total_expected = self.last_seq - self.first_seq + 1
+        miss_rate = (self.total_gaps / total_expected) * 100 if total_expected > 0 else 0.0
+        
+        if self.latencies_ms:
+            avg_lat = sum(self.latencies_ms) / len(self.latencies_ms)
+            min_lat = min(self.latencies_ms)
+            max_lat = max(self.latencies_ms)
+            p95_lat = calculate_percentile(self.latencies_ms, 95.0)
+            p99_lat = calculate_percentile(self.latencies_ms, 99.0)
+        else:
+            avg_lat = min_lat = max_lat = p95_lat = p99_lat = 0.0
+            
+        hz = self.msg_count_1s
+        self.msg_count_1s = 0
+        
         self.get_logger().info(
-            f"  Frekuensi  : {hz:>8.2f} Hz   "
-            f"({count} pesan / {elapsed:.3f} s)"
+            f"Hz: {hz} | Avg: {avg_lat:.2f}ms | Min: {min_lat:.2f}ms | Max: {max_lat:.2f}ms | "
+            f"P95: {p95_lat:.2f}ms | P99: {p99_lat:.2f}ms | Miss: {miss_rate:.2f}% | Total: {self.valid_samples}"
         )
-        self.get_logger().info(
-            f"  Latency    : "
-            f"avg={avg_lat:>7.3f} ms  "
-            f"min={min_lat:>7.3f} ms  "
-            f"max={max_lat:>7.3f} ms  "
-            f"std={std_lat:>7.3f} ms"
-        )
-        self.get_logger().info(
-            f"  Kumulatif  : {self._total_received} pesan total diterima"
-        )
-        # --- Peringatan clock skew jika ada latency negatif ---
-        if self._negative_count > 0:
-            self.get_logger().warn(
-                f"  ⚠ CLOCK SKEW : {self._negative_count} pesan dengan "
-                f"latency negatif! Sinkronkan jam mesin (chrony/NTP)."
-            )
-        self.get_logger().info(separator)
 
-        # --- Reset jendela ---
-        self._latencies.clear()
-        self._msg_count = 0
-        self._negative_count = 0
-        self._window_start = now
+    def export_csv(self):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"brone_log_{self.args.topology}_{self.args.freq}hz_{self.args.payload}b_{self.args.qos}_{timestamp}.csv"
+        
+        total_expected = self.last_seq - self.first_seq + 1 if self.first_seq != -1 else 0
+        miss_rate = (self.total_gaps / total_expected) * 100 if total_expected > 0 else 0.0
+        
+        if self.latencies_ms:
+            avg_lat = sum(self.latencies_ms) / len(self.latencies_ms)
+            min_lat = min(self.latencies_ms)
+            max_lat = max(self.latencies_ms)
+            p95_lat = calculate_percentile(self.latencies_ms, 95.0)
+            p99_lat = calculate_percentile(self.latencies_ms, 99.0)
+        else:
+            avg_lat = min_lat = max_lat = p95_lat = p99_lat = 0.0
+            
+        ros2_distro_note = "NUC=Jazzy_Jetson=Humble"
+        
+        header = [
+            "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
+            "ros2_distro_note", "total_samples", "total_expected", "total_gaps",
+            "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms"
+        ]
+        
+        row = [
+            timestamp, self.args.topology, self.args.freq, self.args.payload, self.args.qos,
+            ros2_distro_note, self.valid_samples, total_expected, self.total_gaps,
+            miss_rate, avg_lat, min_lat, max_lat, p95_lat, p99_lat
+        ]
+        
+        try:
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerow(row)
+            self.get_logger().info(f"Berhasil menyimpan log ke: {filename}")
+        except Exception as e:
+            self.get_logger().error(f"Gagal menyimpan CSV: {e}")
 
 
-# ====================================================================== #
-#  Entry‐point                                                            #
-# ====================================================================== #
-def main(args=None) -> None:
-    rclpy.init(args=args)
-    node = NetworkMonitor()
+def parse_args():
+    parser = argparse.ArgumentParser(description="Network Monitor ROS 2")
+    parser.add_argument('--freq', type=int, default=50, help="Publish frequency (Hz) (untuk log/filename)")
+    parser.add_argument('--payload', type=int, default=128, help="Payload size in bytes (untuk log/filename)")
+    parser.add_argument('--warmup-seconds', type=int, default=3, help="Warmup seconds")
+    parser.add_argument('--qos', type=str, choices=['best_effort', 'reliable'], default='best_effort', help="QoS Profile")
+    parser.add_argument('--topology', type=str, required=True, choices=['nuc2nuc', 'jetson2jetson', 'nuc2jetson', 'jetson2nuc'], help="Topology type")
+    parser.add_argument('--samples', type=int, default=1000, help="Number of samples to collect (0 = unlimited)")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    if args.payload < 16:
+        raise ValueError(f"Payload minimum 16 bytes, diberikan: {args.payload}")
+        
+    rclpy.init()
+    stop_event = threading.Event()
+    node = NetworkMonitor(args, stop_event)
+    
     try:
-        rclpy.spin(node)
+        while rclpy.ok() and not stop_event.is_set():
+            rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
-        node.get_logger().info(
-            f"[NetworkMonitor] Dihentikan. "
-            f"Total pesan diterima: {node._total_received}"
-        )
+        pass
     finally:
+        node.export_csv()
         node.destroy_node()
         rclpy.shutdown()
+        raise SystemExit(0)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
