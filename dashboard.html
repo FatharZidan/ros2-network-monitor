@@ -149,7 +149,34 @@
         
         .badges-container {
             display: flex;
+            align-items: center;
             gap: 8px;
+        }
+
+        .btn-download {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: #38bdf8;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-download:hover {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: rgba(56, 189, 248, 0.6);
+            transform: translateY(-1px);
+        }
+
+        .btn-download:active {
+            transform: translateY(0);
         }
 
         .cuda-badge {
@@ -388,6 +415,14 @@
         <div class="header-right">
             <span class="topic-name">/test_topic</span>
             <div class="badges-container">
+                <a href="/api/export-csv" class="btn-download" id="btnDownload" download title="Unduh Catatan Pengujian CSV">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <span>Download CSV</span>
+                </a>
                 <div class="cuda-badge" id="cudaBadge">
                     <span id="cudaText">CUDA: OFF</span>
                 </div>

@@ -2,11 +2,14 @@
 ROS 2 Network Monitor with Web Dashboard for BRONE robot project.
 """
 
+import csv
+import io
 import struct
 import time
 import json
 import statistics
 import threading
+from datetime import datetime
 from typing import List, Dict, Any
 from collections import deque
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -71,6 +74,8 @@ class MonitorNode(Node):
         self._first_seq = -1
         self._last_seq = -1
         self._total_gaps = 0
+        self._all_latencies: List[float] = []
+        self._last_payload_size = 128
         
         self._lock = threading.Lock()
         
@@ -137,6 +142,8 @@ class MonitorNode(Node):
             self._last_seq = seq
             
         self._latencies.append(latency_ms)
+        self._all_latencies.append(latency_ms)
+        self._last_payload_size = len(raw)
         self._msg_count += 1
         self._total_received += 1
 
@@ -215,6 +222,64 @@ class MonitorNode(Node):
                 'history': list(self._history),
             }
 
+    def generate_csv(self):
+        with self._lock:
+            ts_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+            iso_ts = datetime.now().isoformat()
+            topology = self.get_parameter('topology').value
+            qos_str = self.get_parameter('qos').value
+            
+            total_samples = len(self._all_latencies)
+            total_expected = (self._last_seq - self._first_seq + 1) if self._first_seq != -1 else 0
+            total_gaps = self._total_gaps
+            miss_rate = (total_gaps / total_expected * 100.0) if total_expected > 0 else 0.0
+            
+            if self._all_latencies:
+                avg_lat = sum(self._all_latencies) / len(self._all_latencies)
+                min_lat = min(self._all_latencies)
+                max_lat = max(self._all_latencies)
+                p95_lat = calculate_percentile(self._all_latencies, 95.0)
+                p99_lat = calculate_percentile(self._all_latencies, 99.0)
+            else:
+                avg_lat = min_lat = max_lat = p95_lat = p99_lat = 0.0
+                
+            freq_hz = self._current_stats.get('hz', 0.0)
+            if freq_hz == 0.0 and self._history:
+                hz_list = [h['hz'] for h in self._history if h.get('hz', 0) > 0]
+                if hz_list:
+                    freq_hz = round(sum(hz_list) / len(hz_list), 1)
+            
+            header = [
+                "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
+                "ros2_distro_note", "total_samples", "total_expected", "total_gaps",
+                "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms"
+            ]
+            row = [
+                iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
+                "NUC=Jazzy_Jetson=Humble", total_samples, total_expected, total_gaps,
+                round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3)
+            ]
+            
+            filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(header)
+            writer.writerow(row)
+            
+            if self._history:
+                output.write("\n# Detailed Window History (1s Interval)\n")
+                hist_header = ["timestamp_iso", "hz", "samples_in_window", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms", "miss_rate_pct", "total_accumulated"]
+                writer.writerow(hist_header)
+                for h in self._history:
+                    h_ts = datetime.fromtimestamp(h['timestamp']).isoformat()
+                    writer.writerow([
+                        h_ts, h.get('hz', 0), h.get('count', 0), h.get('avg_lat', 0), h.get('min_lat', 0),
+                        h.get('max_lat', 0), h.get('p95_lat', 0), h.get('p99_lat', 0), h.get('miss_rate_percent', 0), h.get('total', 0)
+                    ])
+                    
+            return filename, output.getvalue()
+
 
 _monitor_node = None
 
@@ -236,6 +301,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 data = {}
             
             self.wfile.write(json.dumps(data).encode('utf-8'))
+        elif self.path == '/api/export-csv':
+            if _monitor_node:
+                filename, csv_text = _monitor_node.generate_csv()
+            else:
+                ts_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"brone_log_{ts_str}.csv"
+                csv_text = "No data\n"
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv; charset=utf-8')
+            self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(csv_text.encode('utf-8'))
         elif self.path == '/':
             self.path = '/dashboard.html'
             super().do_GET()
@@ -264,11 +343,18 @@ def main(args=None):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        _monitor_node.get_logger().info('KeyboardInterrupt received, shutting down...')
+        pass
     finally:
-        httpd.shutdown()
-        _monitor_node.destroy_node()
-        rclpy.shutdown()
+        httpd.server_close()
+        try:
+            _monitor_node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
