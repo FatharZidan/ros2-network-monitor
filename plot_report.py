@@ -37,7 +37,7 @@ def parse_brone_csv(filepath: str) -> dict:
     }
 
     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = [line.strip() for line in f if line.strip()]
+        lines = [line.strip() for line in f if line.strip() and not line.strip().startswith('sep=')]
 
     if not lines:
         return result

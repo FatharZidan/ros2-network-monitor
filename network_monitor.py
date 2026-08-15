@@ -160,7 +160,8 @@ class NetworkMonitor(Node):
         ]
         
         try:
-            with open(filename, 'w', newline='') as f:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                f.write("sep=,\n")
                 writer = csv.writer(f)
                 writer.writerow(header)
                 writer.writerow(row)

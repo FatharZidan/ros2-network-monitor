@@ -146,7 +146,59 @@ python3 network_monitor_gui.py --ros-args -p topology:=nuc2jetson
 
 ---
 
-## 📊 FASE 2: Pembuatan Grafik & Laporan Otomatis
+## Skenario 5: Stress Test (Isolasi Variabel)
+
+Gunakan metode ini untuk mencari titik batas maksimal latensi sistem. **Sangat disarankan menggunakan Metode B (CLI)** agar sistem tidak terbebani oleh rendering GUI saat stres tinggi. 
+
+**ATURAN EMAS:** Ubah hanya SATU variabel dalam satu waktu. Kunci *payload* saat *sweeping* frekuensi, dan kunci frekuensi saat *sweeping payload*.
+
+### A. Sweeping Frekuensi (Kunci Payload di 128 Bytes)
+Bertujuan mencari batas maksimal Hz yang bisa ditangani jaringan sebelum *miss rate* muncul.
+*(Contoh di bawah menggunakan NUC lokal. Sesuaikan `--topology` jika mencoba di Jetson).*
+
+```bash
+# Level 1: 100 Hz
+python3 dummy_publisher.py --topology nuc2nuc --freq 100 --payload 128 --samples 2000
+python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 128 --samples 2000
+
+# Level 2: 500 Hz
+python3 dummy_publisher.py --topology nuc2nuc --freq 500 --payload 128 --samples 5000
+python3 network_monitor.py --topology nuc2nuc --freq 500 --payload 128 --samples 5000
+
+# Level 3: 1000 Hz (Extreme)
+python3 dummy_publisher.py --topology nuc2nuc --freq 1000 --payload 128 --samples 10000
+python3 network_monitor.py --topology nuc2nuc --freq 1000 --payload 128 --samples 10000
+```
+
+### B. Sweeping Payload (Kunci Frekuensi di 50 Hz)
+Bertujuan menguji ketahanan bandwidth (simulasi pengiriman array data besar seperti Lidar/Vision).
+*(Contoh di bawah menggunakan NUC lokal. Sesuaikan `--topology` jika mencoba di Jetson).*
+
+```bash
+# Level 1: 1024 Bytes (1 KB)
+python3 dummy_publisher.py --topology nuc2nuc --freq 50 --payload 1024 --samples 1000
+python3 network_monitor.py --topology nuc2nuc --freq 50 --payload 1024 --samples 1000
+
+# Level 2: 16384 Bytes (16 KB)
+python3 dummy_publisher.py --topology nuc2nuc --freq 50 --payload 16384 --samples 1000
+python3 network_monitor.py --topology nuc2nuc --freq 50 --payload 16384 --samples 1000
+
+# Level 3: 65536 Bytes (65 KB - Maksimum UDP/DDS normal)
+python3 dummy_publisher.py --topology nuc2nuc --freq 50 --payload 65536 --samples 1000
+python3 network_monitor.py --topology nuc2nuc --freq 50 --payload 65536 --samples 1000
+```
+
+### C. Pengujian RELIABLE QoS
+Hanya lakukan ini untuk mensimulasikan trafik State/Command yang pantang hilang. Default QoS adalah best_effort. Pastikan parameter --qos reliable dipasang di kedua sisi.
+*(Contoh di bawah menggunakan NUC lokal. Sesuaikan `--topology` jika mencoba di Jetson).*
+
+```bash
+python3 dummy_publisher.py --topology nuc2nuc --freq 100 --payload 256 --samples 2000 --qos reliable
+python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 256 --samples 2000 --qos reliable
+```
+---
+
+## 📊 FASE 3: Pembuatan Grafik & Laporan Otomatis
 
 Setelah pengujian menghasilkan satu atau beberapa file `brone_log_*.csv`, buat laporan visual lengkap dengan tool `plot_report.py`.
 

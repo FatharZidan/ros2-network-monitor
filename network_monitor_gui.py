@@ -263,6 +263,7 @@ class MonitorNode(Node):
             filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
             
             output = io.StringIO()
+            output.write("sep=,\n")
             writer = csv.writer(output)
             writer.writerow(header)
             writer.writerow(row)
