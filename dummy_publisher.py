@@ -8,6 +8,7 @@ import os
 import time
 import threading
 import sys
+import array
 
 try:
     import cv2
@@ -92,7 +93,7 @@ class DummyPublisher(Node):
         payload_bytes = header + os.urandom(padding_size)
         
         msg = UInt8MultiArray()
-        msg.data = list(payload_bytes)
+        msg.data = array.array('B', payload_bytes)
         
         self.publisher_.publish(msg)
         
@@ -126,8 +127,15 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
         raise SystemExit(0)
 
 if __name__ == '__main__':

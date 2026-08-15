@@ -195,9 +195,19 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        node.export_csv()
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.export_csv()
+        except Exception:
+            pass
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
         raise SystemExit(0)
 
 if __name__ == '__main__':
