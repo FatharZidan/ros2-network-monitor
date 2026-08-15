@@ -65,16 +65,22 @@ class DummyPublisher(Node):
             
     def cuda_workload(self):
         import numpy as np
+        try:
+            dummy_mat = np.random.randint(0, 256, (1080, 1920, 3), dtype=np.uint8)
+            gpu_mat = cv2.cuda_GpuMat()
+            gpu_mat.upload(dummy_mat)
+        except Exception as e:
+            self.get_logger().error(f"CUDA Init Error: {e}")
+            return
+            
         while not self.stop_event.is_set():
             try:
-                dummy_mat = np.random.randint(0, 256, (1080, 1920, 3), dtype=np.uint8)
-                gpu_mat = cv2.cuda_GpuMat()
                 gpu_mat.upload(dummy_mat)
                 gray_gpu = cv2.cuda.cvtColor(gpu_mat, cv2.COLOR_BGR2GRAY)
                 _ = gray_gpu.download()
             except Exception as e:
                 self.get_logger().error(f"CUDA Error: {e}")
-            time.sleep(0.01)
+            time.sleep(0.02)
 
     def timer_callback(self):
         if self.stop_event.is_set():
@@ -125,8 +131,11 @@ def main():
         while rclpy.ok() and not stop_event.is_set():
             rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
-        pass
+        stop_event.set()
     finally:
+        stop_event.set()
+        if hasattr(node, 'gpu_thread') and node.gpu_thread.is_alive():
+            node.gpu_thread.join(timeout=0.3)
         try:
             node.destroy_node()
         except Exception:
