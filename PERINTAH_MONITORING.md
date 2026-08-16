@@ -99,7 +99,7 @@ python3 network_monitor_gui.py --ros-args -p topology:=jetson2jetson
 ssh brone@10.101.143.169
 source /opt/ros/humble/setup.bash
 cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file://$(pwd)/cyclonedds_jetson.xml
+export CYCLONEDDS_URI=file:///home/brone/ros2_network_monitor/cyclonedds_jetson.xml
 
 python3 dummy_publisher.py --topology jetson2nuc --samples 0
 ```
@@ -109,7 +109,7 @@ python3 dummy_publisher.py --topology jetson2nuc --samples 0
 ssh -L 8765:127.0.0.1:8765 brone-ub@10.101.143.111
 source /opt/ros/jazzy/setup.bash
 cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file://$(pwd)/cyclonedds_nuc.xml
+export CYCLONEDDS_URI=file:///home/brone-ub/ros2_network_monitor/cyclonedds_nuc.xml
 
 python3 network_monitor_gui.py --ros-args -p topology:=jetson2nuc
 ```
@@ -126,7 +126,7 @@ python3 network_monitor_gui.py --ros-args -p topology:=jetson2nuc
 ssh brone-ub@10.101.143.111
 source /opt/ros/jazzy/setup.bash
 cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file://$(pwd)/cyclonedds_nuc.xml
+export CYCLONEDDS_URI=file:///home/brone-ub/ros2_network_monitor/cyclonedds_nuc.xml
 
 python3 dummy_publisher.py --topology nuc2jetson --samples 0
 ```
@@ -136,7 +136,7 @@ python3 dummy_publisher.py --topology nuc2jetson --samples 0
 ssh -L 8765:127.0.0.1:8765 brone@10.101.143.169
 source /opt/ros/humble/setup.bash
 cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file://$(pwd)/cyclonedds_jetson.xml
+export CYCLONEDDS_URI=file:///home/brone/ros2_network_monitor/cyclonedds_jetson.xml
 
 python3 network_monitor_gui.py --ros-args -p topology:=nuc2jetson
 ```
