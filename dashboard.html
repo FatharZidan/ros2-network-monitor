@@ -105,15 +105,19 @@
         }
 
         .header-logo {
-            height: 44px;
+            height: 42px;
             width: auto;
             object-fit: contain;
-            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.06));
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));
             transition: transform 0.2s ease;
         }
 
+        .logo-globalizing {
+            height: 36px;
+        }
+
         .header-logo:hover {
-            transform: scale(1.06);
+            transform: scale(1.04);
         }
 
         .logo-divider {
@@ -421,11 +425,11 @@
     <!-- Header -->
     <header class="header">
         <div class="header-left">
-            <!-- 2 Logos: UB & BRONE Mascot -->
+            <!-- 2 Logos: UB Emblem & Globalizing UB -->
             <div class="logos-wrapper">
                 <img src="/logo_ub.png" alt="Logo Universitas Brawijaya" class="header-logo logo-ub" title="Universitas Brawijaya" />
                 <div class="logo-divider"></div>
-                <img src="/logo_brone.png" alt="Logo BRONE Robot" class="header-logo logo-brone" title="BRONE Humanoid Robot Mascot" />
+                <img src="/logo_globalizing.png" alt="Logo Globalizing UB" class="header-logo logo-globalizing" title="Globalizing UB" />
             </div>
             <div class="header-title">
                 <h1>ROS 2 Network Monitor</h1>
