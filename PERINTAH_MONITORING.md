@@ -226,3 +226,31 @@ Jika file CSV dibuka di Excel dan seluruh data berada dalam Kolom A:
 1. Blok **Kolom A**.
 2. Pilih tab menu **Data** ➔ klik **Text to Columns**.
 3. Pilih **Delimited** ➔ Next ➔ Centang **Comma** ➔ Klik **Finish**.
+
+---
+
+## ⏰ Solusi Jika Muncul Latensi Minus (Clock Skew)
+
+### Kapan Perlu Sinkronisasi Jam?
+- **Uji Lokal Standalone (`jetson2jetson` / `nuc2nuc` / Omniwheel):** ❌ **TIDAK PERLU**. Menggunakan 1 hardware CPU yang sama (`perf_counter_ns`), clock homogen dan bebas dari clock skew.
+- **Uji Lintas Mesin (`jetson2nuc` / `nuc2jetson`):** ✅ **DIBUTUHKAN** jika jam sistem NUC dan Jetson memiliki selisih waktu (offset).
+
+### 🛠️ Cara Sinkronisasi Presisi Tinggi (Aman untuk ROS 2 / TF2)
+Jika di monitor muncul nilai latensi negatif (misal `-3.2 ms`):
+
+1. **Di Terminal NUC (Master Clock):**
+   ```bash
+   sudo apt install -y chrony
+   # Sinkronkan NUC ke NTP internet (jika ada) atau jadikan master lokal:
+   sudo chronyd -q 'server pool.ntp.org iburst'
+   ```
+
+2. **Di Terminal JETSON (Client Clock):**
+   ```bash
+   sudo apt install -y chrony
+   # Sinkronkan langsung ke IP NUC:
+   sudo chronyd -q 'server 10.101.143.111 iburst'
+   ```
+
+> 🛡️ **Mengapa Aman untuk ROS 2?**
+> `chrony` menggunakan metode **Clock Slewing** (menyesuaikan kecepatan kristal mikrodetik secara halus tanpa lompatan waktu kasar seperti `ntpdate`), sehingga **Transform Tree (TF2), Odometri, dan State Machine Robotis OP3 tetap 100% stabil dan tidak akan mengalami error waktu.**
