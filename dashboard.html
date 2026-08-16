@@ -3,37 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROS 2 Network Monitor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <title>ROS 2 Network Monitor — BRONE Robot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
         :root {
-            --bg-primary: #0a0a12;
-            --bg-secondary: #12121f;
-            --bg-card: rgba(255, 255, 255, 0.04);
-            --bg-card-hover: rgba(255, 255, 255, 0.07);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --border-glow: rgba(255, 255, 255, 0.1);
-            --text-primary: #e8e8f0;
-            --text-secondary: #8888a0;
-            --text-muted: #555570;
-            --accent-hz: #00d4aa;
-            --accent-latency: #ff6b6b;
-            --accent-jitter: #a78bfa;
-            --accent-total: #38bdf8;
-            --accent-min: #34d399;
-            --accent-max: #fb923c;
-            --accent-p95: #f59e0b;
-            --accent-p99: #f59e0b;
-            --accent-miss: #ef4444;
-            --accent-skew: #8b5cf6;
-            --warning-bg: rgba(255, 217, 61, 0.08);
-            --warning-border: rgba(255, 217, 61, 0.3);
-            --warning-text: #ffd93d;
-            --status-online: #00d4aa;
-            --status-offline: #ff4757;
+            /* Light Mode Palette — Soft, eye-friendly, comfortable */
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f1f5f9;
+            --border-subtle: #e2e8f0;
+            --border-glow: #cbd5e1;
+            
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            
+            /* Metric Accents (Light Mode optimized) */
+            --accent-hz: #0d9488;
+            --accent-latency: #e11d48;
+            --accent-jitter: #7c3aed;
+            --accent-total: #0284c7;
+            --accent-min: #16a34a;
+            --accent-max: #ea580c;
+            --accent-p95: #d97706;
+            --accent-p99: #dc2626;
+            --accent-miss: #e11d48;
+            --accent-skew: #7c3aed;
+            
+            --warning-bg: #fffbeb;
+            --warning-border: #fde68a;
+            --warning-text: #b45309;
+            
+            --status-online: #059669;
+            --status-offline: #dc2626;
+            
             --radius: 16px;
             --radius-sm: 10px;
+            --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+            --shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
         }
 
         * {
@@ -54,30 +64,6 @@
             overflow-x: hidden;
         }
 
-        body::before, body::after {
-            content: '';
-            position: absolute;
-            width: 500px;
-            height: 500px;
-            border-radius: 50%;
-            filter: blur(100px);
-            z-index: -1;
-            opacity: 0.15;
-            pointer-events: none;
-        }
-
-        body::before {
-            top: -200px;
-            left: -200px;
-            background: radial-gradient(circle, var(--accent-hz), transparent 70%);
-        }
-
-        body::after {
-            bottom: -200px;
-            right: -200px;
-            background: radial-gradient(circle, var(--accent-jitter), transparent 70%);
-        }
-
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -86,48 +72,67 @@
             width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 20px;
         }
 
+        /* Header */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             background-color: var(--bg-secondary);
-            padding: 20px 24px;
+            padding: 16px 24px;
             border-radius: var(--radius);
             border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-card);
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
         }
 
-        .logo {
-            width: 42px;
-            height: 42px;
-            background: linear-gradient(135deg, #00d4aa, #00997a);
-            border-radius: var(--radius-sm);
+        /* 2 Logos Container */
+        .logos-wrapper {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 24px;
-            color: white;
-            flex-shrink: 0;
+            gap: 12px;
+            background: #f8fafc;
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .header-logo {
+            height: 44px;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.06));
+            transition: transform 0.2s ease;
+        }
+
+        .header-logo:hover {
+            transform: scale(1.06);
+        }
+
+        .logo-divider {
+            width: 1px;
+            height: 28px;
+            background: var(--border-subtle);
         }
 
         .header-title h1 {
             font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 2px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
         }
 
         .header-title p {
             font-size: 13px;
             color: var(--text-secondary);
+            font-weight: 400;
         }
 
         .header-right {
@@ -139,9 +144,10 @@
 
         .topic-name {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
             color: var(--text-secondary);
-            background: var(--bg-card);
+            background: #f1f5f9;
             padding: 4px 12px;
             border-radius: 20px;
             border: 1px solid var(--border-subtle);
@@ -158,20 +164,20 @@
             align-items: center;
             gap: 6px;
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             padding: 6px 14px;
             border-radius: 20px;
-            background: rgba(56, 189, 248, 0.1);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            color: #38bdf8;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            color: var(--accent-total);
             text-decoration: none;
             cursor: pointer;
             transition: all 0.2s ease;
         }
 
         .btn-download:hover {
-            background: rgba(56, 189, 248, 0.2);
-            border-color: rgba(56, 189, 248, 0.6);
+            background: #e0f2fe;
+            border-color: #7dd3fc;
             transform: translateY(-1px);
         }
 
@@ -183,11 +189,11 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 12px;
+            font-weight: 600;
             padding: 6px 12px;
             border-radius: 20px;
-            background: var(--bg-card);
+            background: #f8fafc;
             border: 1px solid var(--border-subtle);
             color: var(--text-secondary);
         }
@@ -196,9 +202,9 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
-            font-weight: 500;
-            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 14px;
             border-radius: 20px;
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
@@ -206,14 +212,14 @@
 
         .status-badge.online {
             color: var(--status-online);
-            border-color: rgba(0, 212, 170, 0.3);
-            background: rgba(0, 212, 170, 0.05);
+            border-color: #a7f3d0;
+            background: #ecfdf5;
         }
 
         .status-badge.offline {
             color: var(--status-offline);
-            border-color: rgba(255, 71, 87, 0.3);
-            background: rgba(255, 71, 87, 0.05);
+            border-color: #fecaca;
+            background: #fef2f2;
         }
 
         .status-dot {
@@ -224,26 +230,27 @@
         }
 
         .status-badge.online .status-dot {
-            box-shadow: 0 0 8px currentColor;
+            box-shadow: 0 0 6px currentColor;
             animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(0, 212, 170, 0.4); }
-            70% { box-shadow: 0 0 0 6px rgba(0, 212, 170, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(0, 212, 170, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
         }
 
+        /* Clock Skew Banner */
         .clock-skew-banner {
-            display: none; /* hidden by default */
+            display: none;
             background-color: var(--warning-bg);
             border: 1px solid var(--warning-border);
             color: var(--warning-text);
-            padding: 16px 20px;
+            padding: 14px 18px;
             border-radius: var(--radius);
             align-items: center;
             gap: 12px;
-            font-size: 14px;
+            font-size: 13px;
         }
 
         .clock-skew-banner.show {
@@ -251,16 +258,18 @@
         }
 
         .warn-icon {
-            font-size: 20px;
+            font-size: 18px;
         }
 
         .clock-skew-banner code {
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(0,0,0,0.3);
+            background: rgba(0, 0, 0, 0.06);
             padding: 2px 6px;
             border-radius: 4px;
+            font-weight: 600;
         }
 
+        /* Metrics Grid: 3 columns x 3 rows */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -271,17 +280,18 @@
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 18px 20px;
             position: relative;
             overflow: hidden;
-            transition: transform 0.2s, background-color 0.2s;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.2s, box-shadow 0.2s;
             display: flex;
             flex-direction: column;
         }
 
         .metric-card:hover {
             transform: translateY(-2px);
-            background-color: var(--bg-card-hover);
+            box-shadow: var(--shadow-hover);
         }
 
         .metric-card::before {
@@ -290,7 +300,7 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
+            height: 3px;
         }
 
         .card-hz::before { background: var(--accent-hz); }
@@ -305,16 +315,16 @@
         .metric-label {
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             color: var(--text-secondary);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-weight: 600;
         }
 
         .metric-value-container {
             display: flex;
             align-items: baseline;
-            gap: 4px;
+            gap: 6px;
         }
 
         .metric-value {
@@ -328,15 +338,16 @@
         .metric-card.miss-rate .metric-value { color: var(--accent-miss); }
 
         .metric-unit {
-            font-size: 12px;
+            font-size: 13px;
             color: var(--text-muted);
             font-weight: 500;
         }
 
+        /* Charts Grid: 2x2 */
         .charts-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            gap: 16px;
         }
 
         .chart-card {
@@ -344,17 +355,18 @@
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
             padding: 20px;
+            box-shadow: var(--shadow-card);
             display: flex;
             flex-direction: column;
         }
 
         .chart-header {
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .chart-title {
-            font-size: 15px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 700;
             color: var(--text-primary);
         }
 
@@ -366,24 +378,21 @@
 
         .chart-container {
             position: relative;
-            height: 260px;
+            height: 250px;
             width: 100%;
         }
 
+        /* Footer */
         .footer {
             text-align: center;
-            padding: 20px;
+            padding: 16px;
             color: var(--text-muted);
             font-size: 12px;
             border-top: 1px solid var(--border-subtle);
             margin-top: auto;
         }
 
-        @media (max-width: 1100px) {
-            /* Metrics already 3 cols */
-        }
-
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
             .metrics-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
@@ -399,14 +408,25 @@
                 align-items: flex-start;
             }
         }
+        @media (max-width: 600px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <!-- Header -->
     <header class="header">
         <div class="header-left">
-            <div class="logo">B</div>
+            <!-- 2 Logos: UB & BRONE Mascot -->
+            <div class="logos-wrapper">
+                <img src="/logo_ub.png" alt="Logo Universitas Brawijaya" class="header-logo logo-ub" title="Universitas Brawijaya" />
+                <div class="logo-divider"></div>
+                <img src="/logo_brone.png" alt="Logo BRONE Robot" class="header-logo logo-brone" title="BRONE Humanoid Robot Mascot" />
+            </div>
             <div class="header-title">
                 <h1>ROS 2 Network Monitor</h1>
                 <p>BRONE Robot — Real-time DDS Performance Dashboard</p>
@@ -434,16 +454,18 @@
         </div>
     </header>
 
+    <!-- Clock Skew Alert -->
     <div class="clock-skew-banner" id="clockSkewBanner">
         <span class="warn-icon">⚠️</span>
         <span>
             <strong>Clock Skew Terdeteksi!</strong> Ditemukan
             <span id="negativeCount">0</span> pesan dengan latency negatif.
-            Sinkronkan jam antar mesin menggunakan <code>chrony</code> atau <code>ntpdate</code>.
+            Sinkronkan jam antar mesin menggunakan <code>chrony</code>.
             Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
         </span>
     </div>
 
+    <!-- Metric Cards Grid (3 cols x 3 rows) -->
     <div class="metrics-grid">
         <!-- Row 1 -->
         <div class="metric-card card-hz">
@@ -477,7 +499,7 @@
             </div>
         </div>
         <div class="metric-card card-jitter">
-            <div class="metric-label">Jitter / Std</div>
+            <div class="metric-label">Jitter (StdDev)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valJitter">0.00</span>
                 <span class="metric-unit">ms</span>
@@ -487,11 +509,11 @@
             <div class="metric-label">Total Pesan</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valTotal">0</span>
-                <span class="metric-unit">msgs</span>
+                <span class="metric-unit">pesan</span>
             </div>
         </div>
 
-        <!-- Row 3 (New) -->
+        <!-- Row 3 -->
         <div class="metric-card p95">
             <div class="metric-label">p95 Latency</div>
             <div class="metric-value-container">
@@ -515,38 +537,46 @@
         </div>
     </div>
 
+    <!-- Charts Grid (2x2) -->
     <div class="charts-grid">
+        <!-- Chart 1: Hz -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">📈 Frekuensi (Hz)</div>
-                <div class="chart-subtitle">2 menit terakhir</div>
+                <div class="chart-title">Frekuensi Pesan</div>
+                <div class="chart-subtitle">Pengukuran throughput per detik (Hz)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartHz"></canvas>
             </div>
         </div>
+
+        <!-- Chart 2: Latency (Avg, Min, Max) -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">📊 Latency (ms)</div>
-                <div class="chart-subtitle">avg / min / max</div>
+                <div class="chart-title">Statistik Latensi</div>
+                <div class="chart-subtitle">Rata-rata, minimum, dan maksimum per window (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartLatency"></canvas>
             </div>
         </div>
+
+        <!-- Chart 3: Percentile Latency (p95, p99) -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">📐 Percentile Latency</div>
-                <div class="chart-subtitle">p95 / p99</div>
+                <div class="chart-title">Percentile Latency (p95 / p99)</div>
+                <div class="chart-subtitle">Deteksi lonjakan ekstrim & tail latency (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartPercentile"></canvas>
             </div>
         </div>
+
+        <!-- Chart 4: Clock Skew Tracker -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">🔍 Clock Skew Tracker</div>
-                <div class="chart-subtitle">last latency per update</div>
+                <div class="chart-title">Clock Skew Tracker</div>
+                <div class="chart-subtitle">Latensi sampel terakhir vs garis acuan nol (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartSkew"></canvas>
@@ -581,14 +611,14 @@
     // State
     let lastTotal = -1;
 
-    // Chart Commons
-    Chart.defaults.color = '#8888a0';
+    // Chart.js Light Mode Defaults
+    Chart.defaults.color = '#64748b';
     Chart.defaults.font.family = "'JetBrains Mono', monospace";
     Chart.defaults.font.size = 11;
-    Chart.defaults.plugins.tooltip.backgroundColor = '#12121f';
-    Chart.defaults.plugins.tooltip.titleColor = '#e8e8f0';
-    Chart.defaults.plugins.tooltip.bodyColor = '#e8e8f0';
-    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
+    Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f1f5f9';
+    Chart.defaults.plugins.tooltip.borderColor = '#334155';
     Chart.defaults.plugins.tooltip.borderWidth = 1;
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.displayColors = true;
@@ -600,10 +630,11 @@
         scales: {
             x: {
                 grid: { display: false },
-                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0 }
+                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' }
             },
             y: {
-                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#64748b' },
                 beginAtZero: true
             }
         },
@@ -619,8 +650,8 @@
         data: { labels: [], datasets: [{
             label: 'Frekuensi (Hz)',
             data: [],
-            borderColor: '#00d4aa',
-            backgroundColor: 'rgba(0, 212, 170, 0.08)',
+            borderColor: '#0d9488',
+            backgroundColor: 'rgba(13, 148, 136, 0.08)',
             borderWidth: 2,
             fill: true,
             tension: 0.3,
@@ -631,7 +662,7 @@
             ...commonOptions,
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz', color: '#64748b' } }
             }
         }
     });
@@ -644,8 +675,8 @@
             {
                 label: 'Avg',
                 data: [],
-                borderColor: '#ff6b6b',
-                backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                borderColor: '#e11d48',
+                backgroundColor: 'rgba(225, 29, 72, 0.08)',
                 borderWidth: 2,
                 fill: true,
                 tension: 0.3,
@@ -654,7 +685,7 @@
             {
                 label: 'Min',
                 data: [],
-                borderColor: '#34d399',
+                borderColor: '#16a34a',
                 borderWidth: 1.5,
                 borderDash: [5, 5],
                 fill: false,
@@ -664,7 +695,7 @@
             {
                 label: 'Max',
                 data: [],
-                borderColor: '#fb923c',
+                borderColor: '#ea580c',
                 borderWidth: 1.5,
                 borderDash: [5, 5],
                 fill: false,
@@ -675,11 +706,11 @@
         options: {
             ...commonOptions,
             plugins: {
-                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true } }
+                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: '#475569' } }
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
             }
         }
     });
@@ -692,7 +723,7 @@
             {
                 label: 'p95',
                 data: [],
-                borderColor: '#f59e0b',
+                borderColor: '#d97706',
                 borderWidth: 2,
                 fill: false,
                 tension: 0.3,
@@ -701,7 +732,7 @@
             {
                 label: 'p99',
                 data: [],
-                borderColor: '#ef4444',
+                borderColor: '#dc2626',
                 borderWidth: 2,
                 fill: false,
                 tension: 0.3,
@@ -711,11 +742,11 @@
         options: {
             ...commonOptions,
             plugins: {
-                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true } }
+                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: '#475569' } }
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
             }
         }
     });
@@ -727,7 +758,8 @@
         data: { labels: [], datasets: [{
             label: 'Last Latency',
             data: [],
-            borderColor: '#8b5cf6',
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124, 58, 237, 0.06)',
             borderWidth: 2,
             fill: false,
             tension: 0.3,
@@ -736,112 +768,96 @@
         options: {
             ...commonOptions,
             scales: {
-                ...commonOptions.scales,
-                y: { 
-                    ...commonOptions.scales.y, 
+                x: commonOptions.scales.x,
+                y: {
                     beginAtZero: false,
                     suggestedMin: -5,
                     suggestedMax: 5,
-                    ticks: { callback: v => v + ' ms' },
                     grid: {
-                        color: (ctx) => ctx.tick.value === 0 ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.03)',
+                        color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.4)' : 'rgba(0, 0, 0, 0.05)',
                         lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
-                    }
+                    },
+                    ticks: { callback: v => v + ' ms', color: '#64748b' }
                 }
             }
         }
     });
 
-    // Utils
-    function timeLabel(epochSec) {
-        if (!epochSec) return '';
-        const d = new Date(epochSec * 1000);
-        return d.toLocaleTimeString('id-ID', { minute: '2-digit', second: '2-digit' });
+    function formatTime(timestamp) {
+        const d = new Date(timestamp * 1000);
+        return d.toTimeString().split(' ')[0];
     }
 
-    // Polling and Update Logic
-    async function pollStats() {
+    async function update() {
         try {
             const res = await fetch('/api/stats');
-            if (!res.ok) throw new Error('Network response was not ok');
+            if (!res.ok) throw new Error('Network error');
             const data = await res.json();
-            update(data);
-        } catch (error) {
-            console.error('Error fetching stats:', error);
+            
+            const c = data.current;
+            const h = data.history;
+
+            // Online / Offline Status
+            if (c.total > 0 && c.total !== lastTotal) {
+                statusBadge.className = 'status-badge online';
+                statusText.textContent = 'Menerima data';
+            } else {
+                statusBadge.className = 'status-badge offline';
+                statusText.textContent = c.total === 0 ? 'Menunggu data…' : 'Tidak ada data baru';
+            }
+            lastTotal = c.total;
+
+            // Metrics Update
+            valHz.textContent = c.hz.toFixed(1);
+            valAvgLat.textContent = c.avg_lat.toFixed(2);
+            valMinLat.textContent = c.min_lat.toFixed(2);
+            valMaxLat.textContent = c.max_lat.toFixed(2);
+            valJitter.textContent = c.std_lat.toFixed(2);
+            valTotal.textContent = c.total.toLocaleString();
+            valP95.textContent = (c.p95_lat || 0).toFixed(2);
+            valP99.textContent = (c.p99_lat || 0).toFixed(2);
+            valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
+
+            // Clock Skew Warning
+            if (c.clock_skew || c.negative_count > 0) {
+                clockBanner.classList.add('show');
+                negCount.textContent = c.negative_count;
+            } else {
+                clockBanner.classList.remove('show');
+            }
+
+            // Charts Update from History
+            const labels = h.map(p => formatTime(p.timestamp));
+            
+            chartHz.data.labels = labels;
+            chartHz.data.datasets[0].data = h.map(p => p.hz);
+            chartHz.update('none');
+
+            chartLatency.data.labels = labels;
+            chartLatency.data.datasets[0].data = h.map(p => p.avg_lat);
+            chartLatency.data.datasets[1].data = h.map(p => p.min_lat);
+            chartLatency.data.datasets[2].data = h.map(p => p.max_lat);
+            chartLatency.update('none');
+
+            chartPercentile.data.labels = labels;
+            chartPercentile.data.datasets[0].data = h.map(p => p.p95_lat || 0);
+            chartPercentile.data.datasets[1].data = h.map(p => p.p99_lat || 0);
+            chartPercentile.update('none');
+
+            chartSkew.data.labels = labels;
+            chartSkew.data.datasets[0].data = h.map(p => p.last_latency || 0);
+            chartSkew.update('none');
+
+        } catch (e) {
             statusBadge.className = 'status-badge offline';
-            statusText.textContent = 'Disconnected';
+            statusText.textContent = 'Server terputus';
         }
     }
 
-    function update(data) {
-        if (!data || !data.current) return;
-        const c = data.current;
-        const h = data.history || [];
-
-        // 1. Status Badge
-        if (c.total === 0) {
-            statusBadge.className = 'status-badge offline';
-            statusText.textContent = 'Menunggu data';
-        } else if (c.total > lastTotal && lastTotal !== -1) {
-            statusBadge.className = 'status-badge online';
-            statusText.textContent = 'Menerima data';
-        } else if (lastTotal !== -1) {
-            statusBadge.className = 'status-badge offline';
-            statusText.textContent = 'Data berhenti';
-        } else {
-            statusBadge.className = 'status-badge online';
-            statusText.textContent = 'Menerima data';
-        }
-        lastTotal = c.total;
-
-        // 2. Metric Cards
-        valHz.textContent = (c.hz || 0).toFixed(1);
-        valAvgLat.textContent = (c.avg_lat || 0).toFixed(2);
-        valMinLat.textContent = (c.min_lat || 0).toFixed(2);
-        valMaxLat.textContent = (c.max_lat || 0).toFixed(2);
-        valJitter.textContent = (c.std_lat || 0).toFixed(2);
-        valTotal.textContent = (c.total || 0).toLocaleString();
-        valP95.textContent = (c.p95_lat || 0).toFixed(2);
-        valP99.textContent = (c.p99_lat || 0).toFixed(2);
-        valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
-
-        // 3. Clock Skew Banner
-        if (c.clock_skew) {
-            clockBanner.classList.add('show');
-            negCount.textContent = (c.negative_count || 0).toLocaleString();
-        } else {
-            clockBanner.classList.remove('show');
-        }
-
-        // 4. Update Charts
-        const labels = h.map(p => timeLabel(p.timestamp));
-
-        // Chart 1
-        chartHz.data.labels = labels;
-        chartHz.data.datasets[0].data = h.map(p => p.hz);
-        chartHz.update('none');
-
-        // Chart 2
-        chartLatency.data.labels = labels;
-        chartLatency.data.datasets[0].data = h.map(p => p.avg_lat);
-        chartLatency.data.datasets[1].data = h.map(p => p.min_lat);
-        chartLatency.data.datasets[2].data = h.map(p => p.max_lat);
-        chartLatency.update('none');
-
-        // Chart 3
-        chartPercentile.data.labels = labels;
-        chartPercentile.data.datasets[0].data = h.map(p => p.p95_lat);
-        chartPercentile.data.datasets[1].data = h.map(p => p.p99_lat);
-        chartPercentile.update('none');
-
-        // Chart 4
-        chartSkew.data.labels = labels;
-        chartSkew.data.datasets[0].data = h.map(p => p.last_latency);
-        chartSkew.update('none');
-    }
-
-    // Start polling
-    setInterval(pollStats, 1000);
+    // Initial fetch and 1-second interval
+    update();
+    setInterval(update, 1000);
 </script>
+
 </body>
 </html>

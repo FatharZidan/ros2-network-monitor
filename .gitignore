@@ -1,0 +1,16 @@
+# ROS2
+build/
+install/
+log/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# VSCode & IDEs
+.vscode/
+.idea/
+
+# System & Logs
+*.log
