@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  CycloneDDS Config — Jetson (Sender / Monitor)
+  IP Jetson: 10.101.143.169 (ZeroTier)
+  IP NUC: 10.101.143.111 (ZeroTier)
+-->
+<CycloneDDS xmlns="https://github.com/eclipse-cyclonedds/cyclonedds">
+    <Domain id="any">
+        <General>
+            <Interfaces>
+                <NetworkInterface address="10.101.143.169"/>
+            </Interfaces>
+            <AllowMulticast>false</AllowMulticast>
+            <MaxMessageSize>1400B</MaxMessageSize>
+            <FragmentSize>1400B</FragmentSize>
+        </General>
+        <Discovery>
+            <ParticipantIndex>auto</ParticipantIndex>
+            <Peers>
+                <Peer address="10.101.143.111"/>
+            </Peers>
+        </Discovery>
+    </Domain>
+</CycloneDDS>
