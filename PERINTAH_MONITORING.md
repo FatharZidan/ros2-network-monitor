@@ -254,3 +254,22 @@ Jika di monitor muncul nilai latensi negatif (misal `-3.2 ms`):
 
 > 🛡️ **Mengapa Aman untuk ROS 2?**
 > `chrony` menggunakan metode **Clock Slewing** (menyesuaikan kecepatan kristal mikrodetik secara halus tanpa lompatan waktu kasar seperti `ntpdate`), sehingga **Transform Tree (TF2), Odometri, dan State Machine Robotis OP3 tetap 100% stabil dan tidak akan mengalami error waktu.**
+
+---
+
+## 🔍 Catatan Teknis: Middleware & Kompatibilitas Lintas Distro (Jazzy ↔ Humble)
+
+### 1. Pastikan Kedua Mesin Memakai CycloneDDS (`rmw_cyclonedds_cpp`)
+Jika saat dicek dengan `echo $RMW_IMPLEMENTATION` masih bernilai `rmw_fastrtps_cpp`:
+- **Penyebab Masalah:** FastDDS bawaan Humble (Jetson) dan Jazzy (NUC) memiliki bug pada deserialisasi array biner serta format internal yang berbeda, menyebabkan paket tidak masuk.
+- **Solusi Sesi Terminal (Aman & Terisolasi):**
+  ```bash
+  export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+  ```
+  *(Perintah `export` ini hanya aktif di jendela terminal pengujian dan otomatis kembali ke kondisi awal saat terminal ditutup).*
+
+### 2. Peringatan "Failed to parse type hash... from USER_DATA '(null)'"
+Jika di terminal NUC (Jazzy) muncul serangkaian pesan:
+`[WARN] [rmw_cyclonedds_cpp]: Failed to parse type hash for topic ... from USER_DATA '(null)'`
+- **Penyebab:** ROS 2 Jazzy (Ubuntu 24.04) memiliki fitur *Type Hash* (sidik jari tipe pesan). ROS 2 Humble (Ubuntu 22.04) belum memiliki fitur tersebut, sehingga nilainya kosong (`null`).
+- **Status:** **100% AMAN (*Benign Warning*)**. Peringatan ini murni informasi kompatibilitas versi. Seluruh isi data biner, nomor sequence, dan kalkulasi latensi tetap terkirim dan terbaca 100% sempurna tanpa *corruption*.
