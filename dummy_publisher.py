@@ -1,102 +1,151 @@
-#!/usr/bin/env python3
-"""
-dummy_publisher.py — ROS 2 Mock/Dummy Publisher (Bagian TDD)
-
-Mempublikasikan pesan ke /test_topic pada frekuensi presisi tinggi (50 Hz).
-Setiap pesan berisi timestamp epoch (time.time()) agar node monitor
-dapat menghitung latency secara akurat.
-
-Penggunaan:
-    ros2 run <package_name> dummy_publisher
-    — atau —
-    python3 dummy_publisher.py
-"""
-
-import time
-import json
-
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from std_msgs.msg import UInt8MultiArray
+import argparse
+import struct
+import os
+import time
+import threading
+import sys
+import array
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+def get_timestamp_ns(topology: str):
+    """Return timestamp function based on topology."""
+    if topology in ('nuc2nuc', 'jetson2jetson'):
+        return time.perf_counter_ns
+    elif topology in ('nuc2jetson', 'jetson2nuc'):
+        return time.time_ns
+    else:
+        raise ValueError(f"Topology tidak valid: {topology}. Pilihan: nuc2nuc, jetson2jetson, nuc2jetson, jetson2nuc")
 
 class DummyPublisher(Node):
-    """Node publisher yang mengirim pesan berisi timestamp ke /test_topic."""
-
-    # ------------------------------------------------------------------ #
-    #  Konstanta default — mudah diubah untuk eksperimen frekuensi lain   #
-    # ------------------------------------------------------------------ #
-    TARGET_HZ: float = 50.0          # Frekuensi target (Hz)
-    TOPIC_NAME: str = "/test_topic"
-    QOS_DEPTH: int = 10
-
-    def __init__(self) -> None:
-        super().__init__("dummy_publisher")
-
-        # --- Deklarasi parameter ROS 2 agar bisa di-override saat runtime ---
-        self.declare_parameter("target_hz", self.TARGET_HZ)
-        self.declare_parameter("topic_name", self.TOPIC_NAME)
-
-        target_hz: float = (
-            self.get_parameter("target_hz").get_parameter_value().double_value
-        )
-        topic_name: str = (
-            self.get_parameter("topic_name").get_parameter_value().string_value
-        )
-
-        timer_period_sec: float = 1.0 / target_hz
-
-        # --- Publisher & Timer ---
-        self.publisher_ = self.create_publisher(String, topic_name, self.QOS_DEPTH)
-        self.timer_ = self.create_timer(timer_period_sec, self._timer_callback)
-
-        self._seq: int = 0  # Penghitung sequence number
-
-        self.get_logger().info(
-            f"[DummyPublisher] AKTIF — Target: {target_hz:.1f} Hz "
-            f"| Periode: {timer_period_sec * 1000:.2f} ms "
-            f"| Topik: {topic_name}"
-        )
-
-    # ------------------------------------------------------------------ #
-    #  Callback                                                           #
-    # ------------------------------------------------------------------ #
-    def _timer_callback(self) -> None:
-        """Kirim pesan JSON berisi timestamp dan sequence number."""
-        now: float = time.time()  # epoch timestamp (detik, presisi mikrodetik)
-
-        payload: dict = {
-            "seq": self._seq,
-            "stamp": now,           # Waktu pengiriman (epoch seconds)
+    def __init__(self, args, stop_event):
+        super().__init__('dummy_publisher')
+        self.args = args
+        self.stop_event = stop_event
+        self.seq = 0
+        
+        self.ts_func = get_timestamp_ns(self.args.topology)
+        
+        qos_map = {
+            'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
+            'reliable': QoSReliabilityPolicy.RELIABLE,
         }
+        qos_profile = QoSProfile(
+            reliability=qos_map[self.args.qos],
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        
+        self.publisher_ = self.create_publisher(UInt8MultiArray, '/test_topic', qos_profile)
+        
+        timer_period = 1.0 / self.args.freq
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+        
+        self.cuda_enabled = False
+        if cv2 is not None and hasattr(cv2, 'cuda'):
+            try:
+                if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                    self.cuda_enabled = True
+            except Exception:
+                pass
+        
+        if self.cuda_enabled:
+            self.get_logger().info("[GPU] CUDA AKTIF")
+            self.gpu_thread = threading.Thread(target=self.cuda_workload, daemon=True)
+            self.gpu_thread.start()
+        else:
+            self.get_logger().info("[GPU] CUDA tidak tersedia")
+            
+    def cuda_workload(self):
+        import numpy as np
+        try:
+            dummy_mat = np.random.randint(0, 256, (1080, 1920, 3), dtype=np.uint8)
+            gpu_mat = cv2.cuda_GpuMat()
+            gpu_mat.upload(dummy_mat)
+        except Exception as e:
+            self.get_logger().error(f"CUDA Init Error: {e}")
+            return
+            
+        while not self.stop_event.is_set():
+            try:
+                gpu_mat.upload(dummy_mat)
+                gray_gpu = cv2.cuda.cvtColor(gpu_mat, cv2.COLOR_BGR2GRAY)
+                _ = gray_gpu.download()
+            except Exception as e:
+                self.get_logger().error(f"CUDA Error: {e}")
+            time.sleep(0.02)
 
-        msg = String()
-        msg.data = json.dumps(payload)
-
+    def timer_callback(self):
+        if self.stop_event.is_set():
+            return
+            
+        if self.args.samples > 0 and self.seq >= self.args.samples:
+            self.timer.cancel()
+            self.get_logger().info(f"Mencapai target samples: {self.args.samples}. Menghentikan...")
+            self.stop_event.set()
+            return
+            
+        ts_ns = self.ts_func()
+        
+        padding_size = max(0, self.args.payload - 16)
+        header = struct.pack('!Qq', self.seq, ts_ns)
+        payload_bytes = header + os.urandom(padding_size)
+        
+        msg = UInt8MultiArray()
+        msg.data = array.array('B', payload_bytes)
+        
         self.publisher_.publish(msg)
-        self._seq += 1
+        
+        if self.seq % self.args.freq == 0:
+            self.get_logger().info(f"Published seq: {self.seq}, payload: {self.args.payload} bytes")
+            
+        self.seq += 1
 
-        # Log setiap 1 detik agar terminal tidak banjir
-        if self._seq % int(self.TARGET_HZ) == 0:
-            self.get_logger().info(
-                f"[PUB] seq={self._seq}  stamp={now:.6f}"
-            )
+def parse_args():
+    parser = argparse.ArgumentParser(description="Dummy Publisher ROS 2")
+    parser.add_argument('--freq', type=int, default=50, help="Publish frequency (Hz)")
+    parser.add_argument('--payload', type=int, default=128, help="Payload size in bytes")
+    parser.add_argument('--warmup-seconds', type=int, default=3, help="Warmup seconds")
+    parser.add_argument('--qos', type=str, choices=['best_effort', 'reliable'], default='best_effort', help="QoS Profile")
+    parser.add_argument('--topology', type=str, required=True, choices=['nuc2nuc', 'jetson2jetson', 'nuc2jetson', 'jetson2nuc'], help="Topology type")
+    parser.add_argument('--samples', type=int, default=1000, help="Number of samples to publish (0 = unlimited)")
+    return parser.parse_args()
 
-
-# ====================================================================== #
-#  Entry‐point                                                            #
-# ====================================================================== #
-def main(args=None) -> None:
-    rclpy.init(args=args)
-    node = DummyPublisher()
+def main():
+    args = parse_args()
+    if args.payload < 16:
+        raise ValueError(f"Payload minimum 16 bytes, diberikan: {args.payload}")
+        
+    rclpy.init()
+    stop_event = threading.Event()
+    node = DummyPublisher(args, stop_event)
+    
     try:
-        rclpy.spin(node)
+        while rclpy.ok() and not stop_event.is_set():
+            rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
-        node.get_logger().info("[DummyPublisher] Dihentikan oleh pengguna (Ctrl+C).")
+        stop_event.set()
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        stop_event.set()
+        if hasattr(node, 'gpu_thread') and node.gpu_thread.is_alive():
+            node.gpu_thread.join(timeout=0.3)
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
+        raise SystemExit(0)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

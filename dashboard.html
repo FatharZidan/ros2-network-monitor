@@ -3,249 +3,299 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRONE — ROS 2 Network Monitor</title>
+    <title>ROS 2 Network Monitor — BRONE Robot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
-        /* ============================================================ */
-        /*  CSS Variables & Reset                                       */
-        /* ============================================================ */
         :root {
-            --bg-primary: #0a0a12;
-            --bg-secondary: #12121f;
-            --bg-card: rgba(255, 255, 255, 0.04);
-            --bg-card-hover: rgba(255, 255, 255, 0.07);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --border-glow: rgba(255, 255, 255, 0.1);
-
-            --text-primary: #e8e8f0;
-            --text-secondary: #8888a0;
-            --text-muted: #555570;
-
-            --accent-hz: #00d4aa;
-            --accent-hz-glow: rgba(0, 212, 170, 0.15);
-            --accent-latency: #ff6b6b;
-            --accent-latency-glow: rgba(255, 107, 107, 0.15);
-            --accent-jitter: #a78bfa;
-            --accent-jitter-glow: rgba(167, 139, 250, 0.15);
-            --accent-total: #38bdf8;
-            --accent-total-glow: rgba(56, 189, 248, 0.15);
-            --accent-min: #34d399;
-            --accent-max: #fb923c;
-
-            --warning-bg: rgba(255, 217, 61, 0.08);
-            --warning-border: rgba(255, 217, 61, 0.3);
-            --warning-text: #ffd93d;
-
-            --status-online: #00d4aa;
-            --status-offline: #ff4757;
-
+            /* Light Mode Palette — Soft, eye-friendly, comfortable */
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f1f5f9;
+            --border-subtle: #e2e8f0;
+            --border-glow: #cbd5e1;
+            
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            
+            /* Metric Accents (Light Mode optimized) */
+            --accent-hz: #0d9488;
+            --accent-latency: #e11d48;
+            --accent-jitter: #7c3aed;
+            --accent-total: #0284c7;
+            --accent-min: #16a34a;
+            --accent-max: #ea580c;
+            --accent-p95: #d97706;
+            --accent-p99: #dc2626;
+            --accent-miss: #e11d48;
+            --accent-skew: #7c3aed;
+            
+            --warning-bg: #fffbeb;
+            --warning-border: #fde68a;
+            --warning-text: #b45309;
+            
+            --status-online: #059669;
+            --status-offline: #dc2626;
+            
             --radius: 16px;
             --radius-sm: 10px;
+            --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+            --shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
             color: var(--text-primary);
+            line-height: 1.5;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
             overflow-x: hidden;
         }
 
-        /* ============================================================ */
-        /*  Background Ambient Glow                                     */
-        /* ============================================================ */
-        body::before {
-            content: '';
-            position: fixed;
-            top: -30%;
-            left: -10%;
-            width: 60%;
-            height: 60%;
-            background: radial-gradient(circle, rgba(0, 212, 170, 0.04) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        body::after {
-            content: '';
-            position: fixed;
-            bottom: -20%;
-            right: -10%;
-            width: 50%;
-            height: 50%;
-            background: radial-gradient(circle, rgba(255, 107, 107, 0.03) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* ============================================================ */
-        /*  Layout                                                      */
-        /* ============================================================ */
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 24px 28px;
-            position: relative;
-            z-index: 1;
+            padding: 24px;
+            flex: 1;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        /* ============================================================ */
-        /*  Header                                                      */
-        /* ============================================================ */
+        /* Header */
         .header {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            margin-bottom: 28px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-subtle);
+            align-items: center;
+            background-color: var(--bg-secondary);
+            padding: 16px 24px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-card);
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
         }
 
-        .logo {
-            width: 42px;
-            height: 42px;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, var(--accent-hz), #007a62);
+        /* 2 Logos Container */
+        .logos-wrapper {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: 800;
-            color: #fff;
-            letter-spacing: -1px;
+            gap: 12px;
+            background: #f8fafc;
+            padding: 6px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .header-logo {
+            height: 42px;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));
+            transition: transform 0.2s ease;
+        }
+
+        .logo-globalizing {
+            height: 36px;
+        }
+
+        .header-logo:hover {
+            transform: scale(1.04);
+        }
+
+        .logo-divider {
+            width: 1px;
+            height: 28px;
+            background: var(--border-subtle);
         }
 
         .header-title h1 {
             font-size: 20px;
             font-weight: 700;
-            letter-spacing: -0.3px;
             color: var(--text-primary);
+            letter-spacing: -0.3px;
         }
 
         .header-title p {
-            font-size: 12px;
+            font-size: 13px;
             color: var(--text-secondary);
-            margin-top: 2px;
+            font-weight: 400;
         }
 
         .header-right {
             display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .topic-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: #f1f5f9;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .badges-container {
+            display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 8px;
+        }
+
+        .btn-download {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            color: var(--accent-total);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-download:hover {
+            background: #e0f2fe;
+            border-color: #7dd3fc;
+            transform: translateY(-1px);
+        }
+
+        .btn-download:active {
+            transform: translateY(0);
+        }
+
+        .cuda-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: #f8fafc;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
         }
 
         .status-badge {
             display: flex;
             align-items: center;
             gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
             padding: 6px 14px;
             border-radius: 20px;
-            background: rgba(0, 212, 170, 0.08);
-            border: 1px solid rgba(0, 212, 170, 0.2);
-            font-size: 12px;
-            font-weight: 500;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .status-badge.online {
             color: var(--status-online);
-            transition: all 0.3s ease;
+            border-color: #a7f3d0;
+            background: #ecfdf5;
         }
 
         .status-badge.offline {
-            background: rgba(255, 71, 87, 0.08);
-            border-color: rgba(255, 71, 87, 0.2);
             color: var(--status-offline);
+            border-color: #fecaca;
+            background: #fef2f2;
         }
 
         .status-dot {
-            width: 7px;
-            height: 7px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: var(--status-online);
-            animation: pulse-dot 2s infinite;
+            background-color: currentColor;
         }
 
-        .status-badge.offline .status-dot {
-            background: var(--status-offline);
-            animation: none;
+        .status-badge.online .status-dot {
+            box-shadow: 0 0 6px currentColor;
+            animation: pulse 2s infinite;
         }
 
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.8); }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
         }
 
-        .topic-name {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            color: var(--text-muted);
-            background: var(--bg-card);
-            padding: 5px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--border-subtle);
-        }
-
-        /* ============================================================ */
-        /*  Clock Skew Warning Banner                                   */
-        /* ============================================================ */
+        /* Clock Skew Banner */
         .clock-skew-banner {
             display: none;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 18px;
-            margin-bottom: 20px;
-            border-radius: var(--radius-sm);
-            background: var(--warning-bg);
+            background-color: var(--warning-bg);
             border: 1px solid var(--warning-border);
             color: var(--warning-text);
+            padding: 14px 18px;
+            border-radius: var(--radius);
+            align-items: center;
+            gap: 12px;
             font-size: 13px;
-            font-weight: 500;
-            animation: slideDown 0.3s ease-out;
         }
 
-        .clock-skew-banner.visible {
+        .clock-skew-banner.show {
             display: flex;
         }
 
-        .clock-skew-banner .warn-icon {
+        .warn-icon {
             font-size: 18px;
-            flex-shrink: 0;
         }
 
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .clock-skew-banner code {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0, 0, 0, 0.06);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
         }
 
-        /* ============================================================ */
-        /*  Metric Cards                                                */
-        /* ============================================================ */
+        /* Metrics Grid: 3 columns x 3 rows */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 14px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
         }
 
         .metric-card {
-            background: var(--bg-card);
+            background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
             padding: 18px 20px;
-            transition: all 0.25s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
         }
 
         .metric-card::before {
@@ -254,478 +304,564 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            border-radius: var(--radius) var(--radius) 0 0;
-            opacity: 0.7;
+            height: 3px;
         }
 
-        .metric-card:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--border-glow);
-            transform: translateY(-2px);
-        }
-
-        .metric-card.hz::before { background: var(--accent-hz); }
-        .metric-card.avg-lat::before { background: var(--accent-latency); }
-        .metric-card.min-lat::before { background: var(--accent-min); }
-        .metric-card.max-lat::before { background: var(--accent-max); }
-        .metric-card.jitter::before { background: var(--accent-jitter); }
-        .metric-card.total::before { background: var(--accent-total); }
+        .card-hz::before { background: var(--accent-hz); }
+        .card-avg-lat::before { background: var(--accent-latency); }
+        .card-min-lat::before { background: var(--accent-min); }
+        .card-max-lat::before { background: var(--accent-max); }
+        .card-jitter::before { background: var(--accent-jitter); }
+        .card-total::before { background: var(--accent-total); }
+        .metric-card.p95::before, .metric-card.p99::before { background: var(--accent-p95); }
+        .metric-card.miss-rate::before { background: var(--accent-miss); }
 
         .metric-label {
             font-size: 11px;
-            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.6px;
             color: var(--text-secondary);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .metric-value-container {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
         }
 
         .metric-value {
             font-family: 'JetBrains Mono', monospace;
             font-size: 28px;
             font-weight: 700;
-            line-height: 1;
-            margin-bottom: 4px;
+            color: var(--text-primary);
         }
-
-        .metric-card.hz .metric-value { color: var(--accent-hz); }
-        .metric-card.avg-lat .metric-value { color: var(--accent-latency); }
-        .metric-card.min-lat .metric-value { color: var(--accent-min); }
-        .metric-card.max-lat .metric-value { color: var(--accent-max); }
-        .metric-card.jitter .metric-value { color: var(--accent-jitter); }
-        .metric-card.total .metric-value { color: var(--accent-total); }
+        
+        .metric-card.p95 .metric-value, .metric-card.p99 .metric-value { color: var(--accent-p95); }
+        .metric-card.miss-rate .metric-value { color: var(--accent-miss); }
 
         .metric-unit {
-            font-size: 12px;
+            font-size: 13px;
             color: var(--text-muted);
-            font-weight: 400;
+            font-weight: 500;
         }
 
-        /* ============================================================ */
-        /*  Charts                                                      */
-        /* ============================================================ */
+        /* Charts Grid: 2x2 */
         .charts-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 16px;
-            margin-bottom: 24px;
         }
 
-        .chart-panel {
-            background: var(--bg-card);
+        .chart-card {
+            background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
             padding: 20px;
-            transition: border-color 0.25s ease;
-        }
-
-        .chart-panel:hover {
-            border-color: var(--border-glow);
+            box-shadow: var(--shadow-card);
+            display: flex;
+            flex-direction: column;
         }
 
         .chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .chart-title {
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
         }
 
         .chart-subtitle {
-            font-size: 11px;
-            color: var(--text-muted);
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
         }
 
         .chart-container {
             position: relative;
-            height: 260px;
+            height: 250px;
+            width: 100%;
         }
 
-        /* ============================================================ */
-        /*  Footer                                                      */
-        /* ============================================================ */
+        /* Footer */
         .footer {
             text-align: center;
-            padding-top: 16px;
-            border-top: 1px solid var(--border-subtle);
-            font-size: 11px;
+            padding: 16px;
             color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border-subtle);
+            margin-top: auto;
         }
 
-        /* ============================================================ */
-        /*  Responsive                                                  */
-        /* ============================================================ */
-        @media (max-width: 1100px) {
+        @media (max-width: 900px) {
             .metrics-grid {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+            }
+            .header-right {
+                align-items: flex-start;
             }
         }
-
-        @media (max-width: 768px) {
-            .container { padding: 16px; }
-            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-            .charts-grid { grid-template-columns: 1fr; }
-            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
-            .metric-value { font-size: 22px; }
+        @media (max-width: 600px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-
 <body>
-    <div class="container">
-        <!-- ======== Header ======== -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">B</div>
-                <div class="header-title">
-                    <h1>ROS 2 Network Monitor</h1>
-                    <p>BRONE Robot — Real-time DDS Performance Dashboard</p>
-                </div>
+
+<div class="container">
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <!-- 2 Logos: UB Emblem & Globalizing UB -->
+            <div class="logos-wrapper">
+                <img src="/logo_ub.png" alt="Logo Universitas Brawijaya" class="header-logo logo-ub" title="Universitas Brawijaya" />
+                <div class="logo-divider"></div>
+                <img src="/logo_globalizing.png" alt="Logo Globalizing UB" class="header-logo logo-globalizing" title="Globalizing UB" />
             </div>
-            <div class="header-right">
-                <span class="topic-name">/test_topic</span>
+            <div class="header-title">
+                <h1>ROS 2 Network Monitor</h1>
+                <p>BRONE Robot — Real-time DDS Performance Dashboard</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <span class="topic-name">/test_topic</span>
+            <div class="badges-container">
+                <a href="/api/export-csv" class="btn-download" id="btnDownload" download title="Unduh Catatan Pengujian CSV">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <span>Download CSV</span>
+                </a>
+                <div class="cuda-badge" id="cudaBadge">
+                    <span id="cudaText">CUDA: OFF</span>
+                </div>
                 <div class="status-badge offline" id="statusBadge">
                     <span class="status-dot"></span>
                     <span id="statusText">Menunggu data…</span>
                 </div>
             </div>
-        </header>
-
-        <!-- ======== Clock Skew Warning ======== -->
-        <div class="clock-skew-banner" id="clockSkewBanner">
-            <span class="warn-icon">⚠️</span>
-            <span>
-                <strong>Clock Skew Terdeteksi!</strong> Ditemukan
-                <span id="negativeCount">0</span> pesan dengan latency negatif.
-                Sinkronkan jam antar mesin menggunakan <code>chrony</code> atau <code>ntpdate</code>.
-                Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
-            </span>
         </div>
+    </header>
 
-        <!-- ======== Metric Cards ======== -->
-        <div class="metrics-grid">
-            <div class="metric-card hz">
-                <div class="metric-label">Frekuensi</div>
-                <div class="metric-value" id="valHz">—</div>
-                <div class="metric-unit">Hz</div>
-            </div>
-            <div class="metric-card avg-lat">
-                <div class="metric-label">Avg Latency</div>
-                <div class="metric-value" id="valAvgLat">—</div>
-                <div class="metric-unit">ms</div>
-            </div>
-            <div class="metric-card min-lat">
-                <div class="metric-label">Min Latency</div>
-                <div class="metric-value" id="valMinLat">—</div>
-                <div class="metric-unit">ms</div>
-            </div>
-            <div class="metric-card max-lat">
-                <div class="metric-label">Max Latency</div>
-                <div class="metric-value" id="valMaxLat">—</div>
-                <div class="metric-unit">ms</div>
-            </div>
-            <div class="metric-card jitter">
-                <div class="metric-label">Jitter (Std)</div>
-                <div class="metric-value" id="valJitter">—</div>
-                <div class="metric-unit">ms</div>
-            </div>
-            <div class="metric-card total">
-                <div class="metric-label">Total Pesan</div>
-                <div class="metric-value" id="valTotal">—</div>
-                <div class="metric-unit">diterima</div>
-            </div>
-        </div>
-
-        <!-- ======== Charts ======== -->
-        <div class="charts-grid">
-            <div class="chart-panel">
-                <div class="chart-header">
-                    <span class="chart-title">📈 Frekuensi (Hz)</span>
-                    <span class="chart-subtitle">2 menit terakhir</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chartHz"></canvas>
-                </div>
-            </div>
-            <div class="chart-panel">
-                <div class="chart-header">
-                    <span class="chart-title">📊 Latency (ms)</span>
-                    <span class="chart-subtitle">avg / min / max</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chartLatency"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- ======== Footer ======== -->
-        <footer class="footer">
-            BRONE Network Monitor • CycloneDDS • ROS_DOMAIN_ID=30 •
-            Polling setiap 1 detik
-        </footer>
+    <!-- Clock Skew Alert -->
+    <div class="clock-skew-banner" id="clockSkewBanner">
+        <span class="warn-icon">⚠️</span>
+        <span>
+            <strong>Clock Skew Terdeteksi!</strong> Ditemukan
+            <span id="negativeCount">0</span> pesan dengan latency negatif.
+            Sinkronkan jam antar mesin menggunakan <code>chrony</code>.
+            Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
+        </span>
     </div>
 
-    <!-- ============================================================ -->
-    <!--  JavaScript: Polling + Chart.js                               -->
-    <!-- ============================================================ -->
-    <script>
-        // ============================================================
-        //  Chart.js Global Config
-        // ============================================================
-        Chart.defaults.color = '#8888a0';
-        Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
-        Chart.defaults.font.family = "'Inter', sans-serif";
-        Chart.defaults.font.size = 11;
+    <!-- Metric Cards Grid (3 cols x 3 rows) -->
+    <div class="metrics-grid">
+        <!-- Row 1 -->
+        <div class="metric-card card-hz">
+            <div class="metric-label">Frekuensi</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valHz">0.0</span>
+                <span class="metric-unit">Hz</span>
+            </div>
+        </div>
+        <div class="metric-card card-avg-lat">
+            <div class="metric-label">Avg Latency</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valAvgLat">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
+        <div class="metric-card card-min-lat">
+            <div class="metric-label">Min Latency</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valMinLat">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
 
-        const MAX_POINTS = 120;
+        <!-- Row 2 -->
+        <div class="metric-card card-max-lat">
+            <div class="metric-label">Max Latency</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valMaxLat">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
+        <div class="metric-card card-jitter">
+            <div class="metric-label">Jitter (StdDev)</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valJitter">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
+        <div class="metric-card card-total">
+            <div class="metric-label">Total Pesan</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valTotal">0</span>
+                <span class="metric-unit">pesan</span>
+            </div>
+        </div>
 
-        // ============================================================
-        //  Hz Chart
-        // ============================================================
-        const ctxHz = document.getElementById('chartHz').getContext('2d');
-        const chartHz = new Chart(ctxHz, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Hz',
-                    data: [],
-                    borderColor: '#00d4aa',
-                    backgroundColor: 'rgba(0, 212, 170, 0.08)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    pointHitRadius: 8,
-                }]
+        <!-- Row 3 -->
+        <div class="metric-card p95">
+            <div class="metric-label">p95 Latency</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valP95">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
+        <div class="metric-card p99">
+            <div class="metric-label">p99 Latency</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valP99">0.00</span>
+                <span class="metric-unit">ms</span>
+            </div>
+        </div>
+        <div class="metric-card miss-rate">
+            <div class="metric-label">Miss Rate</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valMissRate">0.00</span>
+                <span class="metric-unit">%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Grid (2x2) -->
+    <div class="charts-grid">
+        <!-- Chart 1: Hz -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Frekuensi Pesan</div>
+                <div class="chart-subtitle">Pengukuran throughput per detik (Hz)</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartHz"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2: Latency (Avg, Min, Max) -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Statistik Latensi</div>
+                <div class="chart-subtitle">Rata-rata, minimum, dan maksimum per window (ms)</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartLatency"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 3: Percentile Latency (p95, p99) -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Percentile Latency (p95 / p99)</div>
+                <div class="chart-subtitle">Deteksi lonjakan ekstrim & tail latency (ms)</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartPercentile"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 4: Clock Skew Tracker -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Clock Skew Tracker</div>
+                <div class="chart-subtitle">Latensi sampel terakhir vs garis acuan nol (ms)</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartSkew"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="footer">
+    BRONE Network Monitor • CycloneDDS • ROS_DOMAIN_ID=30 • Polling setiap 1 detik
+</footer>
+
+<script>
+    // DOM Elements
+    const valHz = document.getElementById('valHz');
+    const valAvgLat = document.getElementById('valAvgLat');
+    const valMinLat = document.getElementById('valMinLat');
+    const valMaxLat = document.getElementById('valMaxLat');
+    const valJitter = document.getElementById('valJitter');
+    const valTotal = document.getElementById('valTotal');
+    const valP95 = document.getElementById('valP95');
+    const valP99 = document.getElementById('valP99');
+    const valMissRate = document.getElementById('valMissRate');
+    
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const clockBanner = document.getElementById('clockSkewBanner');
+    const negCount = document.getElementById('negativeCount');
+    const cudaBadge = document.getElementById('cudaBadge');
+    const cudaText = document.getElementById('cudaText');
+
+    // State
+    let lastTotal = -1;
+
+    // Chart.js Light Mode Defaults
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.font.family = "'JetBrains Mono', monospace";
+    Chart.defaults.font.size = 11;
+    Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f1f5f9';
+    Chart.defaults.plugins.tooltip.borderColor = '#334155';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.displayColors = true;
+    
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' }
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 300 },
-                interaction: { intersect: false, mode: 'index' },
-                scales: {
-                    x: {
-                        display: true,
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
-                    },
-                    y: {
-                        display: true,
-                        beginAtZero: true,
-                        grid: { color: 'rgba(255,255,255,0.03)' },
-                        ticks: { callback: v => v + ' Hz' }
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#1a1a2e',
-                        titleColor: '#e8e8f0',
-                        bodyColor: '#00d4aa',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        callbacks: {
-                            label: ctx => `${ctx.parsed.y.toFixed(2)} Hz`
-                        }
-                    }
-                }
+            y: {
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#64748b' },
+                beginAtZero: true
             }
-        });
+        },
+        plugins: {
+            legend: { display: false }
+        }
+    };
 
-        // ============================================================
-        //  Latency Chart
-        // ============================================================
-        const ctxLat = document.getElementById('chartLatency').getContext('2d');
-        const chartLatency = new Chart(ctxLat, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: 'Avg',
-                        data: [],
-                        borderColor: '#ff6b6b',
-                        backgroundColor: 'rgba(255, 107, 107, 0.06)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 0,
-                    },
-                    {
-                        label: 'Min',
-                        data: [],
-                        borderColor: '#34d399',
-                        borderWidth: 1.5,
-                        borderDash: [4, 3],
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 0,
-                    },
-                    {
-                        label: 'Max',
-                        data: [],
-                        borderColor: '#fb923c',
-                        borderWidth: 1.5,
-                        borderDash: [4, 3],
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 0,
-                    },
-                ]
+    // Chart 1: Hz
+    const ctxHz = document.getElementById('chartHz').getContext('2d');
+    const chartHz = new Chart(ctxHz, {
+        type: 'line',
+        data: { labels: [], datasets: [{
+            label: 'Frekuensi (Hz)',
+            data: [],
+            borderColor: '#0d9488',
+            backgroundColor: 'rgba(13, 148, 136, 0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4
+        }]},
+        options: {
+            ...commonOptions,
+            scales: {
+                ...commonOptions.scales,
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz', color: '#64748b' } }
+            }
+        }
+    });
+
+    // Chart 2: Latency
+    const ctxLatency = document.getElementById('chartLatency').getContext('2d');
+    const chartLatency = new Chart(ctxLatency, {
+        type: 'line',
+        data: { labels: [], datasets: [
+            {
+                label: 'Avg',
+                data: [],
+                borderColor: '#e11d48',
+                backgroundColor: 'rgba(225, 29, 72, 0.08)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 300 },
-                interaction: { intersect: false, mode: 'index' },
-                scales: {
-                    x: {
-                        display: true,
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 8, maxRotation: 0 }
-                    },
-                    y: {
-                        display: true,
-                        beginAtZero: true,
-                        grid: { color: 'rgba(255,255,255,0.03)' },
-                        ticks: { callback: v => v.toFixed(1) + ' ms' }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        align: 'end',
-                        labels: {
-                            boxWidth: 10,
-                            boxHeight: 2,
-                            usePointStyle: false,
-                            padding: 14,
-                            font: { size: 11 }
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: '#1a1a2e',
-                        titleColor: '#e8e8f0',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)} ms`
-                        }
-                    }
-                }
+            {
+                label: 'Min',
+                data: [],
+                borderColor: '#16a34a',
+                borderWidth: 1.5,
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0
+            },
+            {
+                label: 'Max',
+                data: [],
+                borderColor: '#ea580c',
+                borderWidth: 1.5,
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0
             }
-        });
-
-        // ============================================================
-        //  DOM References
-        // ============================================================
-        const valHz       = document.getElementById('valHz');
-        const valAvgLat   = document.getElementById('valAvgLat');
-        const valMinLat   = document.getElementById('valMinLat');
-        const valMaxLat   = document.getElementById('valMaxLat');
-        const valJitter   = document.getElementById('valJitter');
-        const valTotal    = document.getElementById('valTotal');
-        const statusBadge = document.getElementById('statusBadge');
-        const statusText  = document.getElementById('statusText');
-        const clockBanner = document.getElementById('clockSkewBanner');
-        const negCount    = document.getElementById('negativeCount');
-
-        let lastTotal = 0;
-        let failCount = 0;
-
-        // ============================================================
-        //  Format time label from epoch
-        // ============================================================
-        function timeLabel(epoch) {
-            const d = new Date(epoch * 1000);
-            const mm = String(d.getMinutes()).padStart(2, '0');
-            const ss = String(d.getSeconds()).padStart(2, '0');
-            return `${mm}:${ss}`;
-        }
-
-        // ============================================================
-        //  Poll API every 1 second
-        // ============================================================
-        async function poll() {
-            try {
-                const res = await fetch('/api/stats');
-                if (!res.ok) throw new Error(res.status);
-                const data = await res.json();
-                failCount = 0;
-                update(data);
-            } catch (e) {
-                failCount++;
-                if (failCount > 3) {
-                    statusBadge.className = 'status-badge offline';
-                    statusText.textContent = 'Koneksi terputus';
-                }
+        ]},
+        options: {
+            ...commonOptions,
+            plugins: {
+                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: '#475569' } }
+            },
+            scales: {
+                ...commonOptions.scales,
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
             }
         }
+    });
 
-        function update(data) {
+    // Chart 3: Percentile Latency
+    const ctxPercentile = document.getElementById('chartPercentile').getContext('2d');
+    const chartPercentile = new Chart(ctxPercentile, {
+        type: 'line',
+        data: { labels: [], datasets: [
+            {
+                label: 'p95',
+                data: [],
+                borderColor: '#d97706',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0
+            },
+            {
+                label: 'p99',
+                data: [],
+                borderColor: '#dc2626',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0
+            }
+        ]},
+        options: {
+            ...commonOptions,
+            plugins: {
+                legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: '#475569' } }
+            },
+            scales: {
+                ...commonOptions.scales,
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
+            }
+        }
+    });
+
+    // Chart 4: Clock Skew
+    const ctxSkew = document.getElementById('chartSkew').getContext('2d');
+    const chartSkew = new Chart(ctxSkew, {
+        type: 'line',
+        data: { labels: [], datasets: [{
+            label: 'Last Latency',
+            data: [],
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124, 58, 237, 0.06)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0
+        }]},
+        options: {
+            ...commonOptions,
+            scales: {
+                x: commonOptions.scales.x,
+                y: {
+                    beginAtZero: false,
+                    suggestedMin: -5,
+                    suggestedMax: 5,
+                    grid: {
+                        color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.4)' : 'rgba(0, 0, 0, 0.05)',
+                        lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
+                    },
+                    ticks: { callback: v => v + ' ms', color: '#64748b' }
+                }
+            }
+        }
+    });
+
+    function formatTime(timestamp) {
+        const d = new Date(timestamp * 1000);
+        return d.toTimeString().split(' ')[0];
+    }
+
+    async function update() {
+        try {
+            const res = await fetch('/api/stats');
+            if (!res.ok) throw new Error('Network error');
+            const data = await res.json();
+            
             const c = data.current;
             const h = data.history;
 
-            // -- Status badge --
-            const receiving = c.total > lastTotal;
-            lastTotal = c.total;
-
-            if (receiving) {
-                statusBadge.className = 'status-badge';
+            // Online / Offline Status
+            if (c.total > 0 && c.total !== lastTotal) {
+                statusBadge.className = 'status-badge online';
                 statusText.textContent = 'Menerima data';
-            } else if (c.total === 0) {
-                statusBadge.className = 'status-badge offline';
-                statusText.textContent = 'Menunggu data…';
             } else {
                 statusBadge.className = 'status-badge offline';
-                statusText.textContent = 'Data berhenti';
+                statusText.textContent = c.total === 0 ? 'Menunggu data…' : 'Tidak ada data baru';
             }
+            lastTotal = c.total;
 
-            // -- Metric cards --
-            valHz.textContent     = c.hz.toFixed(1);
+            // Metrics Update
+            valHz.textContent = c.hz.toFixed(1);
             valAvgLat.textContent = c.avg_lat.toFixed(2);
             valMinLat.textContent = c.min_lat.toFixed(2);
             valMaxLat.textContent = c.max_lat.toFixed(2);
             valJitter.textContent = c.std_lat.toFixed(2);
-            valTotal.textContent  = c.total.toLocaleString();
+            valTotal.textContent = c.total.toLocaleString();
+            valP95.textContent = (c.p95_lat || 0).toFixed(2);
+            valP99.textContent = (c.p99_lat || 0).toFixed(2);
+            valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
 
-            // -- Clock skew warning --
-            if (c.clock_skew) {
-                clockBanner.classList.add('visible');
+            // Clock Skew Warning
+            if (c.clock_skew || c.negative_count > 0) {
+                clockBanner.classList.add('show');
                 negCount.textContent = c.negative_count;
+            } else {
+                clockBanner.classList.remove('show');
             }
 
-            // -- Charts (rebuild from history) --
-            if (h && h.length > 0) {
-                const labels  = h.map(p => timeLabel(p.timestamp));
-                const hzData  = h.map(p => p.hz);
-                const avgData = h.map(p => p.avg_lat);
-                const minData = h.map(p => p.min_lat);
-                const maxData = h.map(p => p.max_lat);
+            // Charts Update from History
+            const labels = h.map(p => formatTime(p.timestamp));
+            
+            chartHz.data.labels = labels;
+            chartHz.data.datasets[0].data = h.map(p => p.hz);
+            chartHz.update('none');
 
-                chartHz.data.labels = labels;
-                chartHz.data.datasets[0].data = hzData;
-                chartHz.update('none');
+            chartLatency.data.labels = labels;
+            chartLatency.data.datasets[0].data = h.map(p => p.avg_lat);
+            chartLatency.data.datasets[1].data = h.map(p => p.min_lat);
+            chartLatency.data.datasets[2].data = h.map(p => p.max_lat);
+            chartLatency.update('none');
 
-                chartLatency.data.labels = labels;
-                chartLatency.data.datasets[0].data = avgData;
-                chartLatency.data.datasets[1].data = minData;
-                chartLatency.data.datasets[2].data = maxData;
-                chartLatency.update('none');
-            }
+            chartPercentile.data.labels = labels;
+            chartPercentile.data.datasets[0].data = h.map(p => p.p95_lat || 0);
+            chartPercentile.data.datasets[1].data = h.map(p => p.p99_lat || 0);
+            chartPercentile.update('none');
+
+            chartSkew.data.labels = labels;
+            chartSkew.data.datasets[0].data = h.map(p => p.last_latency || 0);
+            chartSkew.update('none');
+
+        } catch (e) {
+            statusBadge.className = 'status-badge offline';
+            statusText.textContent = 'Server terputus';
         }
+    }
 
-        // Start polling
-        setInterval(poll, 1000);
-        poll(); // Initial fetch
-    </script>
+    // Initial fetch and 1-second interval
+    update();
+    setInterval(update, 1000);
+</script>
+
 </body>
 </html>

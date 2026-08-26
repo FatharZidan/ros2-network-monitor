@@ -4,11 +4,11 @@
 
 ```
                           ZeroTier VPN (Internet)
-  ┌──────────────┐       ══════════════════════       ┌──────────────────────┐
-  │  PC Peneliti  │◄════►  10.101.143.111 (NUC)       │   Intel NUC          │
-  │  (Windows)    │       10.101.143.175 (Jetson)═══► │   ROS 2 Jazzy        │
-  │               │                                    │   Ubuntu 24.04       │
-  └──────────────┘                                    │   User: brone-ub     │
+  ┌──────────────┐       ══════════════════════        ┌──────────────────────┐
+  │  PC Peneliti │◄════►   10.101.143.111 (NUC)        │   Intel NUC          │
+  │  (Windows)   │        10.101.143.175 (Jetson) ═══► │   ROS 2 Jazzy        │
+  │              │                                     │   Ubuntu 24.04       │
+  └──────────────┘                                     │   User: brone-ub     │
                                                        │                      │
                                                        │   enp114s0:          │
                                                        │   192.168.100.1      │
@@ -32,7 +32,7 @@
 | Perangkat | IP LAN (RJ45) | IP ZeroTier | SSH User | ROS 2 |
 |-----------|---------------|-------------|----------|-------|
 | Intel NUC | `192.168.100.1` | `10.101.143.111` | `brone-ub` | Jazzy |
-| NVIDIA Jetson | `192.168.100.2` | `10.101.143.175` | `humanoid` (ZT) / `brone` (LAN) | Humble |
+| NVIDIA Jetson | `192.168.100.2` | `10.101.143.169` | `brone` | Humble |
 
 ### Middleware: CycloneDDS (Unicast)
 
@@ -53,13 +53,13 @@ export CYCLONEDDS_URI=file:///home/<user>/cyclonedds.xml
 
 ```
 ┌─────────────────────┐                     ┌──────────────────────────────────┐
-│  dummy_publisher.py  │    /test_topic     │  network_monitor.py (CLI)        │
-│                      │   ─── DDS ──────▶  │  network_monitor_gui.py (Web)    │
-│  Kirim:              │   String + JSON     │                                  │
-│   • seq number       │   (CycloneDDS)      │  Terima & Hitung:                │
-│   • timestamp        │                     │   • Frekuensi (Hz)               │
-│                      │                     │   • Latency (ms)                 │
-│                      │                     │   • Statistik/detik              │
+│  dummy_publisher.py │    /test_topic      │  network_monitor.py (CLI)        │
+│                     │   ─── DDS ──────▶   │  network_monitor_gui.py (Web)    │
+│  Kirim:             │   String + JSON     │                                  │
+│   • seq number      │   (CycloneDDS)      │  Terima & Hitung:                │
+│   • timestamp       │                     │   • Frekuensi (Hz)               │
+│                     │                     │   • Latency (ms)                 │
+│                     │                     │   • Statistik/detik              │
 └─────────────────────┘                     └───────────┬──────────────────────┘
                                                         │ (GUI only)
                                                         │ HTTP :8080
@@ -449,15 +449,15 @@ melalui kabel RJ45 point-to-point menggunakan CycloneDDS unicast yang sudah
 terkonfigurasi.
 
 ```
-┌──────────────────────────┐    Kabel RJ45 Langsung    ┌──────────────────────────┐
-│       Intel NUC           │◄════════════════════════►│      NVIDIA Jetson        │
-│    (network_monitor)      │   (Point-to-Point LAN)    │    (dummy_publisher)      │
-│                           │                           │                           │
-│  IP LAN  : 192.168.100.1  │    CycloneDDS Unicast     │  IP LAN  : 192.168.100.2  │
-│  Iface   : enp114s0       │    ROS_DOMAIN_ID=30       │  Iface   : enP8p1s0       │
-│  ROS 2   : Jazzy          │                           │  ROS 2   : Humble         │
-│  User    : brone-ub       │    ◄── /test_topic ──     │  User    : brone          │
-└──────────────────────────┘                           └──────────────────────────┘
+┌──────────────────────────┐    Kabel RJ45 Langsung     ┌──────────────────────────┐
+│       Intel NUC          │ ◄════════════════════════► │      NVIDIA Jetson       │
+│    (network_monitor)     │   (Point-to-Point LAN)     │    (dummy_publisher)     │
+│                          │                            │                          │
+│  IP LAN  : 192.168.100.1 │    CycloneDDS Unicast      │  IP LAN  : 192.168.100.2 │
+│  Iface   : enp114s0      │    ROS_DOMAIN_ID=30        │  Iface   : enP8p1s0      │
+│  ROS 2   : Jazzy         │                            │  ROS 2   : Humble        │
+│  User    : brone-ub      │    ◄── /test_topic ──      │  User    : brone         │
+└──────────────────────────┘                            └──────────────────────────┘
 ```
 
 ### Langkah A.1 — Verifikasi Konektivitas LAN
@@ -657,12 +657,12 @@ monitoring dari laptop peneliti.
 
 ```
 ┌─────────────────────────┐                            ┌─────────────────────────┐
-│   PC Windows (Peneliti)  │    ZeroTier VPN Tunnel     │       Intel NUC          │
-│                          │◄══════════════════════════►│                          │
-│   (network_monitor)      │   Encrypted UDP Tunnel     │   (dummy_publisher)      │
-│                          │                            │                          │
-│   ZT IP: (cek sendiri)   │   ◄── /test_topic ──      │   ZT IP: 10.101.143.111  │
-│                          │       (DDS via VPN)        │   ROS 2: Jazzy           │
+│   PC Windows (Peneliti) │    ZeroTier VPN Tunnel     │       Intel NUC         │
+│                         │◄══════════════════════════►│                         │
+│   (network_monitor)     │   Encrypted UDP Tunnel     │   (dummy_publisher)     │
+│                         │                            │                         │
+│   ZT IP: (cek sendiri)  │   ◄── /test_topic ──       │   ZT IP: 10.101.143.111 │
+│                         │       (DDS via VPN)        │   ROS 2: Jazzy          │
 └─────────────────────────┘                            └─────────────────────────┘
 ```
 
@@ -873,15 +873,15 @@ komunikasi mulai degradasi (packet loss, latency naik, Hz tidak tercapai).
 ┌──────────────────────────────────────────────────────────────────────┐
 │                         Intel NUC (Loopback)                         │
 │                                                                      │
-│  ┌─────────────────┐   /test_topic (DDS)   ┌──────────────────────┐  │
-│  │ dummy_publisher  │ ═══════════════════▶ │  network_monitor     │  │
-│  │                  │    CycloneDDS         │                      │  │
-│  │  Uji bertahap:  │    DOMAIN_ID=30       │  Pantau:             │  │
-│  │   • 100 Hz      │                      │   • Hz aktual vs     │  │
-│  │   • 200 Hz      │                      │     target           │  │
-│  │   • 500 Hz      │                      │   • Latency trend    │  │
-│  │   • 1000 Hz     │                      │   • Packet loss      │  │
-│  └─────────────────┘                      └──────────────────────┘  │
+│  ┌─────────────────┐   /test_topic (DDS)  ┌──────────────────────┐   │
+│  │ dummy_publisher │ ═══════════════════▶ │  network_monitor     │  │
+│  │                 │    CycloneDDS        │                      │   │
+│  │  Uji bertahap:  │    DOMAIN_ID=30      │  Pantau:             │   │
+│  │   • 100 Hz      │                      │   • Hz aktual vs     │   │
+│  │   • 200 Hz      │                      │     target           │   │
+│  │   • 500 Hz      │                      │   • Latency trend    │   │
+│  │   • 1000 Hz     │                      │   • Packet loss      │   │
+│  └─────────────────┘                      └──────────────────────┘   │
 │      Terminal 1                              Terminal 2              │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -994,12 +994,12 @@ watch -n 1 "ps aux | grep -E 'dummy_pub|network_mon' | grep -v grep"
 monitor di NUC, dan *juga* monitor di Windows secara bersamaan.
 
 ```
-┌──────────────┐   ZeroTier    ┌──────────────┐    LAN RJ45     ┌──────────────┐
-│   Windows     │◄════════════►│    NUC        │◄══════════════►│   Jetson      │
-│  (monitor 2)  │  VPN Tunnel  │  (monitor 1)  │  Direct Cable  │ (publisher)   │
-│  10.101.x.x   │              │  10.101.143   │  192.168.100.1  │ 192.168.100.2 │
-│               │              │      .111     │                │               │
-└──────────────┘              └──────────────┘                └──────────────┘
+┌──────────────┐   ZeroTier   ┌──────────────┐    LAN RJ45    ┌───────────────┐
+│   Windows    │◄════════════►│    NUC       │◄══════════════►│   Jetson      │
+│  (monitor 2) │  VPN Tunnel  │  (monitor 1) │  Direct Cable  │ (publisher)   │
+│  10.101.x.x  │              │  10.101.143  │  192.168.100.1 │ 192.168.100.2 │
+│              │              │      .111    │                │               │
+└──────────────┘              └──────────────┘                └───────────────┘
 ```
 
 ### Langkah D.1 — Jalankan Publisher di Jetson
@@ -1040,13 +1040,13 @@ python network_monitor.py
 Bandingkan output dari Monitor NUC vs Monitor Windows:
 
 ```
-┌──────────────────┬───────────────┬────────────────┐
+┌──────────────────┬───────────────┬─────────────────┐
 │ Metrik           │ Monitor NUC   │ Monitor Windows │
-├──────────────────┼───────────────┼────────────────┤
+├──────────────────┼───────────────┼─────────────────┤
 │ Hz               │ ~50 Hz        │ ~50 Hz          │
-│ Avg Latency      │ ~0.5 ms (LAN) │ ~25 ms (VPN)   │
+│ Avg Latency      │ ~0.5 ms (LAN) │ ~25 ms (VPN)    │
 │ Jitter           │ Rendah        │ Lebih tinggi    │
-└──────────────────┴───────────────┴────────────────┘
+└──────────────────┴───────────────┴─────────────────┘
 ```
 
 > Selisih latency antara keduanya ≈ overhead VPN ZeroTier.
