@@ -273,6 +273,118 @@
             font-weight: 600;
         }
 
+        /* Event Marker Bar */
+        .event-panel {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            box-shadow: var(--shadow-card);
+            flex-wrap: wrap;
+        }
+
+        .event-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 320px;
+        }
+
+        .event-icon {
+            font-size: 16px;
+        }
+
+        .event-input {
+            flex: 1;
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .event-input:focus {
+            border-color: #3b82f6;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn-event {
+            padding: 8px 16px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .btn-event:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        /* Event Log Box */
+        .event-log-container {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            box-shadow: var(--shadow-card);
+        }
+
+        .event-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-log-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .event-tags-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+
+        .event-badge-item {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         /* Metrics Grid: 3 columns x 3 rows */
         .metrics-grid {
             display: grid;
@@ -422,6 +534,7 @@
 <body>
 
 <div class="container">
+
     <!-- Header -->
     <header class="header">
         <div class="header-left">
@@ -439,7 +552,7 @@
         <div class="header-right">
             <span class="topic-name">/test_topic</span>
             <div class="badges-container">
-                <a href="/api/export-csv" class="btn-download" id="btnDownload" download title="Unduh Catatan Pengujian CSV">
+                <a href="/api/export-csv" class="btn-download" id="btnDownload" download title="Unduh Catatan Pengujian CSV (Langsung ke Laptop)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
@@ -467,6 +580,17 @@
             Sinkronkan jam antar mesin menggunakan <code>chrony</code>.
             Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
         </span>
+    </div>
+
+    <!-- Event Marker Toolbar Panel (Manual Input) -->
+    <div class="event-panel">
+        <div class="event-input-wrapper">
+            <span class="event-icon">📌</span>
+            <input type="text" class="event-input" id="inputEventText" placeholder="Ketik catatan event / perintah (misal: Eksekusi Skrip A, Beban GPU Nyala, dsb)..." />
+            <button class="btn-event" id="btnSendEvent" onclick="submitEventMarker()">
+                <span>+ Tandai Event</span>
+            </button>
+        </div>
     </div>
 
     <!-- Metric Cards Grid (3 cols x 3 rows) -->
@@ -546,8 +670,8 @@
         <!-- Chart 1: Hz -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">Frekuensi Pesan</div>
-                <div class="chart-subtitle">Pengukuran throughput per detik (Hz)</div>
+                <div class="chart-title">Frekuensi Pesan (Throughput Hz)</div>
+                <div class="chart-subtitle">Laju pengiriman pesan aktual per detik (Target: 50 Hz)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartHz"></canvas>
@@ -557,8 +681,8 @@
         <!-- Chart 2: Latency (Avg, Min, Max) -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">Statistik Latensi</div>
-                <div class="chart-subtitle">Rata-rata, minimum, dan maksimum per window (ms)</div>
+                <div class="chart-title">Statistik Latensi Kontinu</div>
+                <div class="chart-subtitle">Rata-rata, minimum, dan maksimum latensi per detik (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartLatency"></canvas>
@@ -568,8 +692,8 @@
         <!-- Chart 3: Percentile Latency (p95, p99) -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">Percentile Latency (p95 / p99)</div>
-                <div class="chart-subtitle">Deteksi lonjakan ekstrim & tail latency (ms)</div>
+                <div class="chart-title">Percentile Tail Latency (p95 / p99)</div>
+                <div class="chart-subtitle">Deteksi lonjakan ekstrem & kestabilan ekor (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartPercentile"></canvas>
@@ -585,6 +709,17 @@
             <div class="chart-container">
                 <canvas id="chartSkew"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- Event Log Box -->
+    <div class="event-log-container" id="eventLogContainer">
+        <div class="event-log-header">
+            <span class="event-log-title">📌 Riwayat Event / Perintah yang Ditandai</span>
+            <span style="font-size: 11px; color: var(--text-muted);" id="eventCountText">0 event</span>
+        </div>
+        <div class="event-tags-list" id="eventTagsList">
+            <span style="font-size: 12px; color: var(--text-muted);">Belum ada event ditandai. Ketik perintah di atas atau publish ke <code>/brone/command</code>.</span>
         </div>
     </div>
 </div>
@@ -611,18 +746,22 @@
     const negCount = document.getElementById('negativeCount');
     const cudaBadge = document.getElementById('cudaBadge');
     const cudaText = document.getElementById('cudaText');
+    const inputEventText = document.getElementById('inputEventText');
+    const eventTagsList = document.getElementById('eventTagsList');
+    const eventCountText = document.getElementById('eventCountText');
 
     // State
     let lastTotal = -1;
+    let recordedEvents = [];
 
     // Chart.js Light Mode Defaults
-    Chart.defaults.color = '#64748b';
+    Chart.defaults.color = '#475569';
     Chart.defaults.font.family = "'JetBrains Mono', monospace";
     Chart.defaults.font.size = 11;
-    Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+    Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
     Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
-    Chart.defaults.plugins.tooltip.bodyColor = '#f1f5f9';
-    Chart.defaults.plugins.tooltip.borderColor = '#334155';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f8fafc';
+    Chart.defaults.plugins.tooltip.borderColor = '#cbd5e1';
     Chart.defaults.plugins.tooltip.borderWidth = 1;
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.displayColors = true;
@@ -630,11 +769,17 @@
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 300 },
+        animation: { duration: 250 },
         scales: {
             x: {
-                grid: { display: false },
-                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' }
+                grid: { color: 'rgba(0, 0, 0, 0.04)' },
+                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' },
+                title: {
+                    display: true,
+                    text: 'Waktu Pengujian (Detik) / Time',
+                    color: '#475569',
+                    font: { size: 11, weight: '600' }
+                }
             },
             y: {
                 grid: { color: 'rgba(0, 0, 0, 0.05)' },
@@ -666,7 +811,11 @@
             ...commonOptions,
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz', color: '#64748b' } }
+                y: {
+                    ...commonOptions.scales.y,
+                    ticks: { callback: v => v + ' Hz', color: '#64748b' },
+                    title: { display: true, text: 'Throughput Frekuensi (Hz)', color: '#475569', font: { size: 11, weight: '600' } }
+                }
             }
         }
     });
@@ -677,7 +826,7 @@
         type: 'line',
         data: { labels: [], datasets: [
             {
-                label: 'Avg',
+                label: 'Avg Latency',
                 data: [],
                 borderColor: '#e11d48',
                 backgroundColor: 'rgba(225, 29, 72, 0.08)',
@@ -687,21 +836,21 @@
                 pointRadius: 0
             },
             {
-                label: 'Min',
+                label: 'Min Latency',
                 data: [],
                 borderColor: '#16a34a',
                 borderWidth: 1.5,
-                borderDash: [5, 5],
+                borderDash: [4, 4],
                 fill: false,
                 tension: 0.3,
                 pointRadius: 0
             },
             {
-                label: 'Max',
+                label: 'Max Latency',
                 data: [],
                 borderColor: '#ea580c',
                 borderWidth: 1.5,
-                borderDash: [5, 5],
+                borderDash: [4, 4],
                 fill: false,
                 tension: 0.3,
                 pointRadius: 0
@@ -714,7 +863,11 @@
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
+                y: {
+                    ...commonOptions.scales.y,
+                    ticks: { callback: v => v + ' ms', color: '#64748b' },
+                    title: { display: true, text: 'Latensi Komunikasi (ms)', color: '#475569', font: { size: 11, weight: '600' } }
+                }
             }
         }
     });
@@ -725,7 +878,7 @@
         type: 'line',
         data: { labels: [], datasets: [
             {
-                label: 'p95',
+                label: 'p95 Latency',
                 data: [],
                 borderColor: '#d97706',
                 borderWidth: 2,
@@ -734,7 +887,7 @@
                 pointRadius: 0
             },
             {
-                label: 'p99',
+                label: 'p99 Latency (Tail)',
                 data: [],
                 borderColor: '#dc2626',
                 borderWidth: 2,
@@ -750,7 +903,11 @@
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
+                y: {
+                    ...commonOptions.scales.y,
+                    ticks: { callback: v => v + ' ms', color: '#64748b' },
+                    title: { display: true, text: 'Percentile Tail Latency (ms)', color: '#475569', font: { size: 11, weight: '600' } }
+                }
             }
         }
     });
@@ -760,7 +917,7 @@
     const chartSkew = new Chart(ctxSkew, {
         type: 'line',
         data: { labels: [], datasets: [{
-            label: 'Last Latency',
+            label: 'Latensi Sampel Terakhir',
             data: [],
             borderColor: '#7c3aed',
             backgroundColor: 'rgba(124, 58, 237, 0.06)',
@@ -781,7 +938,8 @@
                         color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.4)' : 'rgba(0, 0, 0, 0.05)',
                         lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
                     },
-                    ticks: { callback: v => v + ' ms', color: '#64748b' }
+                    ticks: { callback: v => v + ' ms', color: '#64748b' },
+                    title: { display: true, text: 'Latensi Terukur (ms)', color: '#475569', font: { size: 11, weight: '600' } }
                 }
             }
         }
@@ -792,6 +950,38 @@
         return d.toTimeString().split(' ')[0];
     }
 
+    async function submitEventMarker() {
+        const text = inputEventText.value.trim();
+        if (!text) return;
+        await postEvent(text);
+        inputEventText.value = '';
+    }
+
+    function quickEvent(label) {
+        postEvent(label);
+    }
+
+    async function postEvent(label) {
+        try {
+            const res = await fetch('/api/event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: label })
+            });
+            if (res.ok) {
+                update();
+            }
+        } catch (e) {
+            console.error('Gagal mengirim event marker:', e);
+        }
+    }
+
+    inputEventText.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            submitEventMarker();
+        }
+    });
+
     async function update() {
         try {
             const res = await fetch('/api/stats');
@@ -800,6 +990,7 @@
             
             const c = data.current;
             const h = data.history;
+            const evts = data.events || [];
 
             // Online / Offline Status
             if (c.total > 0 && c.total !== lastTotal) {
@@ -811,12 +1002,25 @@
             }
             lastTotal = c.total;
 
+            // CUDA Badge
+            if (c.cuda_active) {
+                cudaBadge.style.background = '#dcfce7';
+                cudaBadge.style.borderColor = '#86efac';
+                cudaBadge.style.color = '#15803d';
+                cudaText.textContent = 'CUDA: ACTIVE';
+            } else {
+                cudaBadge.style.background = '#f8fafc';
+                cudaBadge.style.borderColor = '#e2e8f0';
+                cudaBadge.style.color = '#64748b';
+                cudaText.textContent = 'CUDA: OFF';
+            }
+
             // Metrics Update
             valHz.textContent = c.hz.toFixed(1);
             valAvgLat.textContent = c.avg_lat.toFixed(2);
             valMinLat.textContent = c.min_lat.toFixed(2);
             valMaxLat.textContent = c.max_lat.toFixed(2);
-            valJitter.textContent = c.std_lat.toFixed(2);
+            valJitter.textContent = (c.jitter || c.std_lat || 0).toFixed(2);
             valTotal.textContent = c.total.toLocaleString();
             valP95.textContent = (c.p95_lat || 0).toFixed(2);
             valP99.textContent = (c.p99_lat || 0).toFixed(2);
@@ -830,8 +1034,16 @@
                 clockBanner.classList.remove('show');
             }
 
+            // Events List Update
+            if (evts.length > 0) {
+                eventCountText.textContent = `${evts.length} event`;
+                eventTagsList.innerHTML = evts.map(e => 
+                    `<span class="event-badge-item"><span>📌</span><strong>t=${e.second}s:</strong> ${e.label}</span>`
+                ).join('');
+            }
+
             // Charts Update from History
-            const labels = h.map(p => formatTime(p.timestamp));
+            const labels = h.map((p, idx) => `${p.elapsed || idx+1}s`);
             
             chartHz.data.labels = labels;
             chartHz.data.datasets[0].data = h.map(p => p.hz);
