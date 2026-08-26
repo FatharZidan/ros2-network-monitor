@@ -18,15 +18,14 @@ REM Kirim ke JETSON
 scp dummy_publisher.py network_monitor.py network_monitor_gui.py dashboard.html plot_report.py brone@10.101.143.169:~/ros2_network_monitor/
 ```
 
-### 2. Setup Environment Sekali Jalan (Wajib)
-Jalankan di terminal **NUC** dan **JETSON**:
+### 2. Verifikasi Environment (Sudah Terkonfigurasi Permanen ✅)
+Kedua mesin (**NUC** & **JETSON**) sudah terkonfigurasi permanen di `~/.bashrc`. Cukup pastikan dengan perintah verifikasi cepat ini:
 ```bash
-echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc
-echo "export ROS_DOMAIN_ID=30" >> ~/.bashrc
-source ~/.bashrc
+echo "RMW: $RMW_IMPLEMENTATION | DOMAIN_ID: $ROS_DOMAIN_ID"
 ```
+👉 *Output yang diharapkan:* **`RMW: rmw_cyclonedds_cpp | DOMAIN_ID: 30`**
 
-*(Khusus di Jetson, pastikan paket CycloneDDS terpasang: `sudo apt install -y ros-humble-rmw-cyclonedds-cpp`)*
+*(Catatan: Jika mengonfigurasi mesin baru dari nol di masa depan, tambahkan `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` dan `export ROS_DOMAIN_ID=30` ke `~/.bashrc`).*
 
 ---
 
@@ -200,24 +199,25 @@ python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 256 --samples
 
 ## 📊 FASE 3: Pembuatan Grafik & Laporan Otomatis
 
-Setelah pengujian menghasilkan satu atau beberapa file `brone_log_*.csv`, buat laporan visual lengkap dengan tool `plot_report.py`.
+Setelah pengujian menghasilkan file `brone_log_*.csv`, buat laporan visual time-series lengkap dengan tool `plot_report.py`.
 
-### 1. Eksekusi Generator Laporan (di NUC atau JETSON)
+### 1. Eksekusi Generator Laporan (di Laptop atau NUC/Jetson)
 ```bash
-cd ~/ros2_network_monitor
-
-# Memproses semua file CSV yang ada di folder:
+# Memproses file CSV log terbaru:
 python3 plot_report.py
+
+# Atau memproses file CSV tertentu:
+python3 plot_report.py brone_log_jetson2nuc_50hz_128b_best_effort_20260826_201015.csv
 ```
 
 ### 2. Output yang Dihasilkan:
-1. 📑 **`brone_report_YYYYMMDD_HHMMSS.html` (Laporan Interaktif):**
-   - Kartu Metrik Latensi (Avg, Min, Max, p95, p99) & Miss Rate per skenario.
-   - Tabel ringkasan komparasi.
-   - Grafik batang perbandingan latensi & kestabilan Hz.
-   - Grafik riwayat *time-series* latensi per detik.
-   - Tombol **"🖨️ Cetak / Simpan PDF"** siap lampiran dokumen resmi riset.
-2. 🖼️ **`brone_report_YYYYMMDD_HHMMSS.png`:** Grafik resolusi tinggi (300 DPI).
+1. 📑 **`<nama_file_log>_report.html` (Laporan Interaktif Light Mode):**
+   - Kartu Metrik Latensi (Avg, Min, Max, p95, p99), Throughput Hz, Total Sampel, & Miss Rate.
+   - Daftar Event Marker yang ditandai selama pengujian.
+   - Grafik Fluktuasi Latensi Kontinu (Avg, p95, p99, Min-Max Jitter Shading).
+   - Grafik Kestabilan Throughput Frekuensi (Hz).
+   - Tombol **"🖨️ Cetak / Simpan PDF"** siap untuk lampiran dokumen resmi skripsi.
+2. 🖼️ **`<nama_file_log>_plot.png`:** Grafik resolusi tinggi (300 DPI Light Mode) dengan 3 subplot bertumpuk dan garis vertikal penanda event.
 
 ---
 
