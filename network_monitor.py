@@ -131,7 +131,6 @@ class NetworkMonitor(Node):
 
     def export_csv(self):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        iso_ts = datetime.now().isoformat()
         filename = f"brone_log_{self.args.topology}_{self.args.freq}hz_{self.args.payload}b_{self.args.qos}_{timestamp}.csv"
         
         total_expected = self.last_seq - self.first_seq + 1 if self.first_seq != -1 else 0
@@ -143,33 +142,29 @@ class NetworkMonitor(Node):
             max_lat = max(self.latencies_ms)
             p95_lat = calculate_percentile(self.latencies_ms, 95.0)
             p99_lat = calculate_percentile(self.latencies_ms, 99.0)
-            overall_jitter = max_lat - min_lat
         else:
-            avg_lat = min_lat = max_lat = p95_lat = p99_lat = overall_jitter = 0.0
+            avg_lat = min_lat = max_lat = p95_lat = p99_lat = 0.0
             
+        ros2_distro_note = "NUC=Jazzy_Jetson=Humble"
+        
+        header = [
+            "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
+            "ros2_distro_note", "total_samples", "total_expected", "total_gaps",
+            "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms"
+        ]
+        
+        row = [
+            timestamp, self.args.topology, self.args.freq, self.args.payload, self.args.qos,
+            ros2_distro_note, self.valid_samples, total_expected, self.total_gaps,
+            miss_rate, avg_lat, min_lat, max_lat, p95_lat, p99_lat
+        ]
+        
         try:
             with open(filename, 'w', newline='', encoding='utf-8') as f:
                 f.write("sep=,\n")
-                f.write(f"# BRONE ROS 2 Latency Benchmark Log — Single Session Continuous Time-Series\n")
-                f.write(f"# Session Timestamp: {iso_ts}\n")
-                f.write(f"# Topology: {self.args.topology}\n")
-                f.write(f"# Target Frequency: {self.args.freq} Hz\n")
-                f.write(f"# Payload Size: {self.args.payload} Bytes\n")
-                f.write(f"# QoS Profile: {self.args.qos}\n")
-                f.write(f"# Overall Summary: Avg={avg_lat:.3f}ms | p95={p95_lat:.3f}ms | p99={p99_lat:.3f}ms | Jitter={overall_jitter:.3f}ms | MissRate={miss_rate:.2f}% | TotalSamples={self.valid_samples}\n")
-                f.write(f"#\n")
-                
                 writer = csv.writer(f)
-                header = [
-                    "timestamp_iso", "second", "hz", "avg_lat_ms", "min_lat_ms", "max_lat_ms",
-                    "p95_lat_ms", "p99_lat_ms", "jitter_ms", "gaps_count", "total_samples", "event_marker"
-                ]
                 writer.writerow(header)
-                # Write summary as initial row
-                writer.writerow([
-                    iso_ts, 1, self.args.freq, round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3),
-                    round(p95_lat, 3), round(p99_lat, 3), round(overall_jitter, 3), self.total_gaps, self.valid_samples, ""
-                ])
+                writer.writerow(row)
             self.get_logger().info(f"Berhasil menyimpan log ke: {filename}")
         except Exception as e:
             self.get_logger().error(f"Gagal menyimpan CSV: {e}")
