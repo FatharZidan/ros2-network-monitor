@@ -282,6 +282,280 @@
             padding: 2px 6px;
             border-radius: 4px;
             font-weight: 600;
+        /* Session Control & Timer Panel */
+        .session-panel {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 18px 24px;
+            box-shadow: var(--shadow-card);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .session-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .session-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .select-duration {
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            background: #f8fafc;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .select-duration:focus {
+            border-color: #3b82f6;
+            background: #ffffff;
+        }
+
+        .btn-session {
+            padding: 8px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-session:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-session-start {
+            background: #16a34a;
+            color: white;
+        }
+
+        .btn-session-start:hover:not(:disabled) {
+            background: #15803d;
+            transform: translateY(-1px);
+        }
+
+        .btn-session-stop {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-session-stop:hover:not(:disabled) {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+
+        .btn-session-reset {
+            background: #f1f5f9;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .btn-session-reset:hover:not(:disabled) {
+            background: #e2e8f0;
+            color: var(--text-primary);
+        }
+
+        .session-status-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .session-state-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .state-idle {
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+        }
+
+        .state-running {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        .state-completed {
+            background: #ecfdf5;
+            color: #059669;
+            border: 1px solid #a7f3d0;
+        }
+
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); }
+            70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+
+        .session-timer-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .progress-track {
+            height: 6px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        /* Event Marker Bar */
+        .event-panel {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            box-shadow: var(--shadow-card);
+            flex-wrap: wrap;
+        }
+
+        .event-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 320px;
+        }
+
+        .event-icon {
+            font-size: 16px;
+        }
+
+        .event-input {
+            flex: 1;
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .event-input:focus {
+            border-color: #3b82f6;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn-event {
+            padding: 8px 16px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .btn-event:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        /* Event Log Box */
+        .event-log-container {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            box-shadow: var(--shadow-card);
+        }
+
+        .event-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-log-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .event-tags-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+
+        .event-badge-item {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         /* Metrics Grid: 3 columns x 3 rows */
@@ -609,6 +883,51 @@
         </span>
     </div>
 
+    <!-- Session Control & Benchmark Timer Panel -->
+    <div class="session-panel">
+        <div class="session-top-row">
+            <div class="session-controls">
+                <label for="selectDuration" style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">⏱️ Durasi Uji:</label>
+                <select class="select-duration" id="selectDuration">
+                    <option value="30">30 Detik</option>
+                    <option value="60" selected>60 Detik (1 Menit)</option>
+                    <option value="120">120 Detik (2 Menit)</option>
+                    <option value="300">300 Detik (5 Menit)</option>
+                    <option value="0">Manual (Tanpa Batas)</option>
+                </select>
+                <button class="btn-session btn-session-start" id="btnStartSession" onclick="startSession()">
+                    <span>▶️ Mulai Monitoring</span>
+                </button>
+                <button class="btn-session btn-session-stop" id="btnStopSession" onclick="stopSession()" disabled>
+                    <span>⏹️ Berhenti</span>
+                </button>
+                <button class="btn-session btn-session-reset" id="btnResetSession" onclick="resetSession()">
+                    <span>🔄 Reset</span>
+                </button>
+            </div>
+            <div class="session-status-container">
+                <div class="session-state-badge state-idle" id="sessionBadge">
+                    <span id="sessionBadgeText">⏸️ STANDBY (SIAP)</span>
+                </div>
+                <div class="session-timer-text" id="sessionTimerText">00:00 / 01:00</div>
+            </div>
+        </div>
+        <div class="progress-track">
+            <div class="progress-bar-fill" id="sessionProgressFill"></div>
+        </div>
+    </div>
+
+    <!-- Event Marker Toolbar Panel -->
+    <div class="event-panel">
+        <div class="event-input-wrapper">
+            <span class="event-icon">📌</span>
+            <input type="text" class="event-input" id="inputEventText" placeholder="Ketik catatan event / perintah (misal: Eksekusi Skrip A, Beban GPU Nyala, dsb)..." />
+            <button class="btn-event" id="btnSendEvent" onclick="submitEventMarker()">
+                <span>+ Tandai Event</span>
+            </button>
+        </div>
+    </div>
+
     <!-- Metric Cards Grid (3 cols x 3 rows) -->
     <div class="metrics-grid">
         <!-- Row 1 -->
@@ -829,7 +1148,7 @@
 </footer>
 
 <script>
-    // DOM Elements
+    // DOM Elements - Metrics
     const valHz = document.getElementById('valHz');
     const valAvgLat = document.getElementById('valAvgLat');
     const valMinLat = document.getElementById('valMinLat');
@@ -847,17 +1166,30 @@
     const cudaBadge = document.getElementById('cudaBadge');
     const cudaText = document.getElementById('cudaText');
 
+    // DOM Elements - Session Control & Events
+    const selectDuration = document.getElementById('selectDuration');
+    const btnStartSession = document.getElementById('btnStartSession');
+    const btnStopSession = document.getElementById('btnStopSession');
+    const btnResetSession = document.getElementById('btnResetSession');
+    const sessionBadge = document.getElementById('sessionBadge');
+    const sessionBadgeText = document.getElementById('sessionBadgeText');
+    const sessionTimerText = document.getElementById('sessionTimerText');
+    const sessionProgressFill = document.getElementById('sessionProgressFill');
+    const inputEventText = document.getElementById('inputEventText');
+    const btnSendEvent = document.getElementById('btnSendEvent');
+
     // State
     let lastTotal = -1;
+    let currentSessionState = 'IDLE';
 
     // Chart.js Light Mode Defaults
-    Chart.defaults.color = '#64748b';
+    Chart.defaults.color = '#475569';
     Chart.defaults.font.family = "'JetBrains Mono', monospace";
     Chart.defaults.font.size = 11;
-    Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+    Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
     Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
-    Chart.defaults.plugins.tooltip.bodyColor = '#f1f5f9';
-    Chart.defaults.plugins.tooltip.borderColor = '#334155';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f8fafc';
+    Chart.defaults.plugins.tooltip.borderColor = '#cbd5e1';
     Chart.defaults.plugins.tooltip.borderWidth = 1;
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.displayColors = true;
@@ -865,11 +1197,12 @@
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 300 },
+        animation: { duration: 250 },
         scales: {
             x: {
-                grid: { display: false },
-                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' }
+                grid: { color: 'rgba(0, 0, 0, 0.04)' },
+                ticks: { maxTicksLimit: 8, maxRotation: 0, minRotation: 0, color: '#64748b' },
+                title: { display: true, text: 'Waktu Pengujian (Detik) / Time (s)', color: '#475569', font: { size: 11, weight: '600' } }
             },
             y: {
                 grid: { color: 'rgba(0, 0, 0, 0.05)' },
@@ -901,7 +1234,7 @@
             ...commonOptions,
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz', color: '#64748b' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' Hz', color: '#64748b' }, title: { display: true, text: 'Throughput Frekuensi (Hz)', color: '#475569', font: { size: 11, weight: '600' } } }
             }
         }
     });
@@ -926,7 +1259,7 @@
                 data: [],
                 borderColor: '#16a34a',
                 borderWidth: 1.5,
-                borderDash: [5, 5],
+                borderDash: [4, 4],
                 fill: false,
                 tension: 0.3,
                 pointRadius: 0
@@ -936,7 +1269,7 @@
                 data: [],
                 borderColor: '#ea580c',
                 borderWidth: 1.5,
-                borderDash: [5, 5],
+                borderDash: [4, 4],
                 fill: false,
                 tension: 0.3,
                 pointRadius: 0
@@ -949,7 +1282,7 @@
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' }, title: { display: true, text: 'Latensi Komunikasi (ms)', color: '#475569', font: { size: 11, weight: '600' } } }
             }
         }
     });
@@ -960,7 +1293,7 @@
         type: 'line',
         data: { labels: [], datasets: [
             {
-                label: 'p95',
+                label: 'p95 Latency',
                 data: [],
                 borderColor: '#d97706',
                 borderWidth: 2,
@@ -969,7 +1302,7 @@
                 pointRadius: 0
             },
             {
-                label: 'p99',
+                label: 'p99 Latency (Tail)',
                 data: [],
                 borderColor: '#dc2626',
                 borderWidth: 2,
@@ -985,7 +1318,7 @@
             },
             scales: {
                 ...commonOptions.scales,
-                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' } }
+                y: { ...commonOptions.scales.y, ticks: { callback: v => v + ' ms', color: '#64748b' }, title: { display: true, text: 'Percentile Tail Latency (ms)', color: '#475569', font: { size: 11, weight: '600' } } }
             }
         }
     });
@@ -995,7 +1328,7 @@
     const chartSkew = new Chart(ctxSkew, {
         type: 'line',
         data: { labels: [], datasets: [{
-            label: 'Last Latency',
+            label: 'Latensi Sampel Terakhir',
             data: [],
             borderColor: '#7c3aed',
             backgroundColor: 'rgba(124, 58, 237, 0.06)',
@@ -1016,16 +1349,79 @@
                         color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.4)' : 'rgba(0, 0, 0, 0.05)',
                         lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
                     },
-                    ticks: { callback: v => v + ' ms', color: '#64748b' }
+                    ticks: { callback: v => v + ' ms', color: '#64748b' },
+                    title: { display: true, text: 'Latensi Terukur (ms)', color: '#475569', font: { size: 11, weight: '600' } }
                 }
             }
         }
     });
 
-    function formatTime(timestamp) {
-        const d = new Date(timestamp * 1000);
-        return d.toTimeString().split(' ')[0];
+    function formatSecs(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
+
+    // Session Control Functions
+    async function startSession() {
+        const duration = parseInt(selectDuration.value, 10);
+        try {
+            const res = await fetch('/api/session/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ duration: duration })
+            });
+            if (res.ok) {
+                update();
+            }
+        } catch (e) {
+            console.error('Gagal memulai sesi:', e);
+        }
+    }
+
+    async function stopSession() {
+        try {
+            const res = await fetch('/api/session/stop', { method: 'POST' });
+            if (res.ok) {
+                update();
+            }
+        } catch (e) {
+            console.error('Gagal menghentikan sesi:', e);
+        }
+    }
+
+    async function resetSession() {
+        try {
+            const res = await fetch('/api/session/reset', { method: 'POST' });
+            if (res.ok) {
+                update();
+            }
+        } catch (e) {
+            console.error('Gagal me-reset sesi:', e);
+        }
+    }
+
+    async function submitEventMarker() {
+        const text = inputEventText.value.trim();
+        if (!text) return;
+        try {
+            const res = await fetch('/api/event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: text })
+            });
+            if (res.ok) {
+                inputEventText.value = '';
+                update();
+            }
+        } catch (e) {
+            console.error('Gagal mengirim event marker:', e);
+        }
+    }
+
+    inputEventText.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') submitEventMarker();
+    });
 
     async function update() {
         try {
@@ -1033,26 +1429,90 @@
             if (!res.ok) throw new Error('Network error');
             const data = await res.json();
             
-            const c = data.current;
-            const h = data.history;
+            const session = data.session || { state: 'IDLE', is_recording: false, elapsed: 0, target_duration: 60, remaining: 60, connected: false };
+            const c = data.current || {};
+            const h = data.history || [];
 
-            // Online / Offline Status
-            if (c.total > 0 && c.total !== lastTotal) {
+            currentSessionState = session.state;
+
+            // Update Session Controls & Badges
+            if (session.state === 'RUNNING') {
+                sessionBadge.className = 'session-state-badge state-running';
+                sessionBadgeText.textContent = '🔴 RECORDING (MEREKAM DATA)';
+                btnStartSession.disabled = true;
+                btnStopSession.disabled = false;
+                btnResetSession.disabled = true;
+                selectDuration.disabled = true;
+                inputEventText.disabled = false;
+                btnSendEvent.disabled = false;
+
+                const targetStr = session.target_duration > 0 ? formatSecs(session.target_duration) : '∞';
+                sessionTimerText.textContent = `${formatSecs(session.elapsed)} / ${targetStr}`;
+                
+                const pct = session.target_duration > 0 ? Math.min(100, (session.elapsed / session.target_duration) * 100) : 100;
+                sessionProgressFill.style.width = `${pct}%`;
+
+            } else if (session.state === 'COMPLETED') {
+                sessionBadge.className = 'session-state-badge state-completed';
+                sessionBadgeText.textContent = '✅ SELESAI (DATA TERKUNCI)';
+                btnStartSession.disabled = false;
+                btnStopSession.disabled = true;
+                btnResetSession.disabled = false;
+                selectDuration.disabled = false;
+                inputEventText.disabled = true;
+                btnSendEvent.disabled = true;
+
+                const targetStr = session.target_duration > 0 ? formatSecs(session.target_duration) : formatSecs(session.elapsed);
+                sessionTimerText.textContent = `${formatSecs(session.elapsed)} / ${targetStr} (Selesai)`;
+                sessionProgressFill.style.width = '100%';
+
+            } else {
+                // IDLE
+                sessionBadge.className = 'session-state-badge state-idle';
+                sessionBadgeText.textContent = '⏸️ STANDBY (SIAP)';
+                btnStartSession.disabled = false;
+                btnStopSession.disabled = true;
+                btnResetSession.disabled = true;
+                selectDuration.disabled = false;
+                inputEventText.disabled = true;
+                btnSendEvent.disabled = true;
+
+                const dur = parseInt(selectDuration.value, 10);
+                const targetStr = dur > 0 ? formatSecs(dur) : '∞';
+                sessionTimerText.textContent = `00:00 / ${targetStr}`;
+                sessionProgressFill.style.width = '0%';
+            }
+
+            // Connection Badge (Publisher Active)
+            if (session.connected || (c.total > 0 && c.total !== lastTotal)) {
                 statusBadge.className = 'status-badge online';
-                statusText.textContent = 'Menerima data';
+                statusText.textContent = session.state === 'RUNNING' ? 'Merekam data…' : 'Publisher terhubung';
             } else {
                 statusBadge.className = 'status-badge offline';
-                statusText.textContent = c.total === 0 ? 'Menunggu data…' : 'Tidak ada data baru';
+                statusText.textContent = session.state === 'RUNNING' ? 'Tidak ada data baru' : 'Menunggu publisher…';
             }
             lastTotal = c.total;
 
+            // CUDA Badge
+            if (c.cuda_active) {
+                cudaBadge.style.background = '#dcfce7';
+                cudaBadge.style.borderColor = '#86efac';
+                cudaBadge.style.color = '#15803d';
+                cudaText.textContent = 'CUDA: ACTIVE';
+            } else {
+                cudaBadge.style.background = '#f8fafc';
+                cudaBadge.style.borderColor = '#e2e8f0';
+                cudaBadge.style.color = '#64748b';
+                cudaText.textContent = 'CUDA: OFF';
+            }
+
             // Metrics Update
-            valHz.textContent = c.hz.toFixed(1);
-            valAvgLat.textContent = c.avg_lat.toFixed(2);
-            valMinLat.textContent = c.min_lat.toFixed(2);
-            valMaxLat.textContent = c.max_lat.toFixed(2);
-            valJitter.textContent = c.std_lat.toFixed(2);
-            valTotal.textContent = c.total.toLocaleString();
+            valHz.textContent = (c.hz || 0).toFixed(1);
+            valAvgLat.textContent = (c.avg_lat || 0).toFixed(2);
+            valMinLat.textContent = (c.min_lat || 0).toFixed(2);
+            valMaxLat.textContent = (c.max_lat || 0).toFixed(2);
+            valJitter.textContent = (c.std_lat || 0).toFixed(2);
+            valTotal.textContent = (c.total || 0).toLocaleString();
             valP95.textContent = (c.p95_lat || 0).toFixed(2);
             valP99.textContent = (c.p99_lat || 0).toFixed(2);
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
@@ -1065,8 +1525,8 @@
                 clockBanner.classList.remove('show');
             }
 
-            // Charts Update from History
-            const labels = h.map(p => formatTime(p.timestamp));
+            // Charts Update from Session History
+            const labels = h.map(p => `${p.elapsed || 0}s`);
             
             chartHz.data.labels = labels;
             chartHz.data.datasets[0].data = h.map(p => p.hz);

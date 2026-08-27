@@ -79,6 +79,16 @@ class MonitorNode(Node):
         
         self._lock = threading.Lock()
         
+        # Session Control State Machine ('IDLE', 'RUNNING', 'COMPLETED')
+        self._session_state = 'IDLE'
+        self._is_recording = False
+        self._target_duration = 60  # seconds (0 = manual/unlimited)
+        self._session_start_time = None
+        self._session_elapsed = 0
+        self._last_msg_recv_time = 0.0
+        self._live_feed_connected = False
+        self._events = []
+        
         self._current_stats = {
             'hz': 0.0,
             'count': 0,
@@ -99,7 +109,7 @@ class MonitorNode(Node):
             'total_gaps': 0,
         }
         
-        self._history = deque(maxlen=120)
+        self._history = deque(maxlen=3600)  # Support up to 1 hour test
         
         qos_str = self.get_parameter('qos').value
         qos_map = {
@@ -113,12 +123,106 @@ class MonitorNode(Node):
         )
         
         self.create_subscription(UInt8MultiArray, topic_name, self._listener_callback, qos_profile)
+        self.create_subscription(String, '/brone/command', self._command_callback, 10)
+        self.create_subscription(String, '/brone/event_marker', self._command_callback, 10)
         self.create_timer(report_interval, self._report_callback)
+
+    def _command_callback(self, msg):
+        """Auto-record event marker from robot CLI commands."""
+        if self._is_recording:
+            label = f"CMD: {msg.data.strip()}"
+            self.add_event(label)
+
+    def add_event(self, label):
+        """Record an event marker at current second."""
+        with self._lock:
+            evt = {
+                'second': self._session_elapsed,
+                'label': label,
+                'timestamp': time.time(),
+                'iso': datetime.now().isoformat()
+            }
+            self._events.append(evt)
+            self.get_logger().info(f"📌 [EVENT MARKER] t={self._session_elapsed}s: {label}")
+
+    def start_session(self, duration_sec=60):
+        """Start benchmark session and recording."""
+        with self._lock:
+            self._latencies.clear()
+            self._all_latencies.clear()
+            self._history.clear()
+            self._events.clear()
+            self._msg_count = 0
+            self._total_received = 0
+            self._first_seq = -1
+            self._last_seq = -1
+            self._total_gaps = 0
+            self._negative_count = 0
+            self._clock_skew_warned = False
+            self._target_duration = int(duration_sec)
+            self._session_start_time = time.time()
+            self._window_start = self._session_start_time
+            self._session_elapsed = 0
+            self._is_recording = True
+            self._session_state = 'RUNNING'
+            self.get_logger().info(f"▶️ [BENCHMARK STARTED] Target Durasi: {self._target_duration if self._target_duration > 0 else 'Manual (Tanpa Batas)'} detik")
+
+    def stop_session(self):
+        """Stop benchmark session."""
+        with self._lock:
+            self._is_recording = False
+            self._session_state = 'COMPLETED'
+            self.get_logger().info(f"⏹️ [BENCHMARK STOPPED] Sesi dihentikan pada detik ke-{self._session_elapsed}")
+
+    def reset_session(self):
+        """Reset session back to IDLE standby state."""
+        with self._lock:
+            self._latencies.clear()
+            self._all_latencies.clear()
+            self._history.clear()
+            self._events.clear()
+            self._msg_count = 0
+            self._total_received = 0
+            self._first_seq = -1
+            self._last_seq = -1
+            self._total_gaps = 0
+            self._negative_count = 0
+            self._is_recording = False
+            self._session_state = 'IDLE'
+            self._session_elapsed = 0
+            self._current_stats = {
+                'hz': 0.0,
+                'count': 0,
+                'avg_lat': 0.0,
+                'min_lat': 0.0,
+                'max_lat': 0.0,
+                'std_lat': 0.0,
+                'total': 0,
+                'clock_skew': False,
+                'negative_count': 0,
+                'elapsed': 0.0,
+                'timestamp': time.time(),
+                'cuda_active': False,
+                'p95_lat': 0.0,
+                'p99_lat': 0.0,
+                'miss_rate_percent': 0.0,
+                'last_latency': 0.0,
+                'total_gaps': 0,
+            }
+            self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
     def _listener_callback(self, msg):
         raw = bytes(msg.data)
         if len(raw) < 16:
             self.get_logger().warn('Received message too short')
+            return
+            
+        now_ts = time.time()
+        self._last_msg_recv_time = now_ts
+        self._live_feed_connected = True
+        
+        # Only accumulate metrics if recording is active!
+        if not self._is_recording:
             return
             
         seq, ts_ns = struct.unpack('!Qq', raw[:16])
@@ -149,8 +253,21 @@ class MonitorNode(Node):
 
     def _report_callback(self):
         now = time.time()
-        elapsed = now - self._window_start
+        self._live_feed_connected = (now - self._last_msg_recv_time) < 2.0
         
+        # If IDLE or COMPLETED, just maintain keep-alive
+        if not self._is_recording:
+            return
+            
+        self._session_elapsed = int(now - self._session_start_time)
+        
+        # Auto-stop on timer expiration
+        if self._target_duration > 0 and self._session_elapsed >= self._target_duration:
+            self._is_recording = False
+            self._session_state = 'COMPLETED'
+            self.get_logger().info(f"✅ [BENCHMARK SELESAI] Target durasi {self._target_duration} detik tercapai!")
+
+        elapsed = now - self._window_start
         count = self._msg_count
         latencies = self._latencies
         
@@ -190,7 +307,7 @@ class MonitorNode(Node):
             'total': self._total_received,
             'clock_skew': self._negative_count > 0,
             'negative_count': self._negative_count,
-            'elapsed': round(elapsed, 3),
+            'elapsed': self._session_elapsed,
             'timestamp': round(now, 3),
             'cuda_active': self._cuda_active,
             'p95_lat': round(p95, 3),
@@ -205,7 +322,7 @@ class MonitorNode(Node):
             self._history.append(stats)
             
         self.get_logger().info(
-            f"Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
+            f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
             f"P95: {stats['p95_lat']}ms | Gaps: {stats['total_gaps']} | "
             f"Miss: {stats['miss_rate_percent']}%"
         )
@@ -217,9 +334,19 @@ class MonitorNode(Node):
 
     def get_api_data(self):
         with self._lock:
+            remaining = max(0, self._target_duration - self._session_elapsed) if self._target_duration > 0 else 0
             return {
+                'session': {
+                    'state': self._session_state,
+                    'is_recording': self._is_recording,
+                    'elapsed': self._session_elapsed,
+                    'target_duration': self._target_duration,
+                    'remaining': remaining,
+                    'connected': self._live_feed_connected,
+                },
                 'current': self._current_stats,
                 'history': list(self._history),
+                'events': list(self._events),
             }
 
     def generate_csv(self):
@@ -695,7 +822,64 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
-            
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else '{}'
+        
+        try:
+            payload = json.loads(post_data) if post_data else {}
+        except Exception:
+            payload = {}
+
+        if self.path == '/api/session/start':
+            duration = payload.get('duration', 60)
+            if _monitor_node:
+                _monitor_node.start_session(duration)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'started', 'duration': duration}).encode('utf-8'))
+            else:
+                self.send_response(503)
+                self.end_headers()
+
+        elif self.path == '/api/session/stop':
+            if _monitor_node:
+                _monitor_node.stop_session()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'stopped'}).encode('utf-8'))
+            else:
+                self.send_response(503)
+                self.end_headers()
+
+        elif self.path == '/api/session/reset':
+            if _monitor_node:
+                _monitor_node.reset_session()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'reset'}).encode('utf-8'))
+            else:
+                self.send_response(503)
+                self.end_headers()
+
+        elif self.path == '/api/event':
+            label = payload.get('label', 'Event')
+            if _monitor_node:
+                _monitor_node.add_event(label)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok', 'label': label}).encode('utf-8'))
+            else:
+                self.send_response(503)
+                self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def log_message(self, format, *args):
         # Suppress access logs
         pass
