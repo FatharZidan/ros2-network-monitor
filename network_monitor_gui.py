@@ -19,7 +19,7 @@ from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import UInt8MultiArray, String
 
 
 def get_timestamp_ns(topology: str):
