@@ -698,7 +698,7 @@ class MonitorNode(Node):
     const reportData = {report_json};
     const history = reportData.history || [];
 
-    const labels = history.map((h, i) => `${h.elapsed || i + 1}s`);
+    const labels = history.map((h, i) => `${{h.elapsed || i + 1}}s`);
     const avgLats = history.map(h => h.avg_lat || 0);
     const minLats = history.map(h => h.min_lat || 0);
     const maxLats = history.map(h => h.max_lat || 0);
@@ -712,34 +712,35 @@ class MonitorNode(Node):
     Chart.defaults.font.family = "'JetBrains Mono', monospace";
     Chart.defaults.font.size = 11;
 
-    const commonOpts = {
+    const commonOpts = {{
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        plugins: {
-            legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, font: { weight: '700', size: 10 } } }
-        },
-        scales: {
-            x: {
-                title: { display: true, text: 'Waktu (Detik) / Time (s)', color: '#475569', font: { weight: '700', size: 10 } },
-                grid: { color: 'rgba(0, 0, 0, 0.04)' },
-                ticks: { maxTicksLimit: 8, font: { weight: '600' } }
-            },
-            y: {
+        plugins: {{
+            legend: {{ display: true, position: 'top', align: 'end', labels: {{ boxWidth: 12, font: {{ weight: '700', size: 10 }} }} }}
+        }},
+        scales: {{
+            x: {{
+                title: {{ display: true, text: 'Waktu (Detik) / Time (s)', color: '#475569', font: {{ weight: '700', size: 10 }} }},
+                grid: {{ color: 'rgba(0, 0, 0, 0.04)' }},
+                ticks: {{ maxTicksLimit: 8, font: {{ weight: '600' }} }}
+            }},
+            y: {{
                 beginAtZero: true,
-                title: { display: true, text: 'Nilai Terukur', color: '#475569', font: { weight: '700', size: 10 } },
-                grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                ticks: { font: { weight: '600' } }
-            }
-        }
-    };
+                title: {{ display: true, text: 'Nilai Terukur', color: '#475569', font: {{ weight: '700', size: 10 }} }},
+                grid: {{ color: 'rgba(0, 0, 0, 0.05)' }},
+                ticks: {{ font: {{ weight: '600' }} }}
+            }}
+        }}
+    }};
 
-    new Chart(document.getElementById('chartAvgMax'), {
+    // 1. Chart Avg & Max
+    new Chart(document.getElementById('chartAvgMax'), {{
         type: 'line',
-        data: {
+        data: {{
             labels: labels,
             datasets: [
-                {
+                {{
                     label: 'Avg Latency (ms)',
                     data: avgLats,
                     borderColor: '#0284c7',
@@ -748,8 +749,8 @@ class MonitorNode(Node):
                     fill: true,
                     tension: 0.2,
                     pointRadius: 0
-                },
-                {
+                }},
+                {{
                     label: 'Max Latency (ms)',
                     data: maxLats,
                     borderColor: '#ea580c',
@@ -758,24 +759,25 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                }
+                }}
             ]
-        },
-        options: {
+        }},
+        options: {{
             ...commonOpts,
-            scales: {
+            scales: {{
                 ...commonOpts.scales,
-                y: { ...commonOpts.scales.y, title: { display: true, text: 'Latensi (ms)', color: '#475569', font: { weight: '700', size: 10 } } }
-            }
-        }
-    });
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Latensi (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+            }}
+        }}
+    }});
 
-    new Chart(document.getElementById('chartTail'), {
+    // 2. Chart Tail (p95 & p99)
+    new Chart(document.getElementById('chartTail'), {{
         type: 'line',
-        data: {
+        data: {{
             labels: labels,
             datasets: [
-                {
+                {{
                     label: 'p95 Latency (ms)',
                     data: p95Lats,
                     borderColor: '#d97706',
@@ -784,8 +786,8 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                },
-                {
+                }},
+                {{
                     label: 'p99 Latency (Tail)',
                     data: p99Lats,
                     borderColor: '#dc2626',
@@ -793,24 +795,25 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                }
+                }}
             ]
-        },
-        options: {
+        }},
+        options: {{
             ...commonOpts,
-            scales: {
+            scales: {{
                 ...commonOpts.scales,
-                y: { ...commonOpts.scales.y, title: { display: true, text: 'Tail Latency (ms)', color: '#475569', font: { weight: '700', size: 10 } } }
-            }
-        }
-    });
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Tail Latency (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+            }}
+        }}
+    }});
 
-    new Chart(document.getElementById('chartHz'), {
+    // 3. Chart Hz
+    new Chart(document.getElementById('chartHz'), {{
         type: 'line',
-        data: {
+        data: {{
             labels: labels,
             datasets: [
-                {
+                {{
                     label: 'Throughput Aktual (Hz)',
                     data: hzVals,
                     borderColor: '#0d9488',
@@ -819,24 +822,25 @@ class MonitorNode(Node):
                     fill: true,
                     tension: 0.2,
                     pointRadius: 0
-                }
+                }}
             ]
-        },
-        options: {
+        }},
+        options: {{
             ...commonOpts,
-            scales: {
+            scales: {{
                 ...commonOpts.scales,
-                y: { ...commonOpts.scales.y, title: { display: true, text: 'Frekuensi (Hz)', color: '#475569', font: { weight: '700', size: 10 } } }
-            }
-        }
-    });
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Frekuensi (Hz)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+            }}
+        }}
+    }});
 
-    new Chart(document.getElementById('chartJitter'), {
+    // 4. Chart Clock Skew & Jitter
+    new Chart(document.getElementById('chartJitter'), {{
         type: 'line',
-        data: {
+        data: {{
             labels: labels,
             datasets: [
-                {
+                {{
                     label: 'Latensi Terukur (Clock Skew, ms)',
                     data: lastLats,
                     borderColor: '#7c3aed',
@@ -845,8 +849,8 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                },
-                {
+                }},
+                {{
                     label: 'Jitter (StdDev σ, ms)',
                     data: stdLats,
                     borderColor: '#0284c7',
@@ -855,27 +859,27 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                }
+                }}
             ]
-        },
-        options: {
+        }},
+        options: {{
             ...commonOpts,
-            scales: {
+            scales: {{
                 ...commonOpts.scales,
-                y: {
+                y: {{
                     beginAtZero: false,
                     suggestedMin: -2,
                     suggestedMax: 4,
-                    grid: {
+                    grid: {{
                         color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(0, 0, 0, 0.05)',
                         lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
-                    },
-                    ticks: { font: { weight: '600' } },
-                    title: { display: true, text: 'Latensi & Jitter (ms)', color: '#475569', font: { weight: '700', size: 10 } }
-                }
-            }
-        }
-    });
+                    }},
+                    ticks: {{ font: {{ weight: '600' }} }},
+                    title: {{ display: true, text: 'Latensi & Jitter (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }}
+                }}
+            }}
+        }}
+    }});
 </script>
 
 </body>
