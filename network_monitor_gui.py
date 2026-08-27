@@ -472,7 +472,7 @@ class MonitorNode(Node):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRONE — Laporan Uji Latensi ROS 2 ({report_data['filename']})</title>
+    <title>BRONE — ROS 2 Network Latency Benchmark Report</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -532,7 +532,7 @@ class MonitorNode(Node):
         .btn-print:hover {{ background: #e2e8f0; }}
         .metrics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 14px;
             margin-bottom: 20px;
         }}
@@ -546,41 +546,59 @@ class MonitorNode(Node):
         .metric-label {{ font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px; }}
         .metric-val {{ font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; color: var(--text-primary); }}
         .metric-unit {{ font-size: 12px; color: var(--text-muted); font-weight: 500; }}
+        .charts-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }}
         .chart-box {{
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
-            border-radius: var(--radius);
-            padding: 20px;
+            border-radius: var(--radius-sm);
+            padding: 16px 18px;
             box-shadow: var(--shadow-card);
-            margin-bottom: 20px;
         }}
-        .chart-box h3 {{ font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }}
-        .chart-box p {{ font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }}
-        .chart-canvas-container {{ position: relative; height: 260px; width: 100%; }}
+        .chart-box h3 {{ font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }}
+        .chart-box p {{ font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; }}
+        .chart-canvas-container {{ position: relative; height: 220px; width: 100%; }}
         .event-box {{
             background: #faf5ff;
             border: 1px solid #e9d5ff;
-            border-radius: var(--radius);
-            padding: 14px 18px;
-            margin-bottom: 20px;
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            margin-bottom: 16px;
         }}
-        .event-box h4 {{ font-size: 12px; font-weight: 700; color: #6b21a8; text-transform: uppercase; margin-bottom: 8px; }}
+        .event-box h4 {{ font-size: 11px; font-weight: 700; color: #6b21a8; text-transform: uppercase; margin-bottom: 6px; }}
         .event-list {{ display: flex; gap: 8px; flex-wrap: wrap; }}
         .event-pill {{
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
-            padding: 4px 10px;
+            padding: 3px 8px;
             background: #ffffff;
             border: 1px solid #d8b4fe;
             border-radius: 6px;
             color: #7e22ce;
             font-weight: 600;
         }}
+        .tip-callout {{
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 12px 16px;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            font-size: 12px;
+            color: #1e40af;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }}
+        @media (max-width: 800px) {{
+            .charts-grid {{ grid-template-columns: 1fr; }}
+        }}
         footer {{
             text-align: center;
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-muted);
-            padding: 16px;
+            padding: 14px;
             border-top: 1px solid var(--border-subtle);
         }}
     </style>
@@ -589,8 +607,8 @@ class MonitorNode(Node):
 
 <header>
     <div class="header-title">
-        <h1>📊 Laporan Uji Latensi Kontinu ROS 2 (BRONE)</h1>
-        <p>File Sumber: <code>{report_data['filename']}</code> • Durasi: {len(history_list)} detik</p>
+        <h1>📊 Laporan Uji Latensi & Jitter ROS 2 (BRONE)</h1>
+        <p>File Sumber: <code>{report_data['filename']}</code> • Durasi: {len(history_list)} detik • Format Siap Paper / PPT</p>
     </div>
     <button class="btn-print" onclick="window.print()">
         <span>🖨️ Cetak / Simpan PDF</span>
@@ -601,6 +619,10 @@ class MonitorNode(Node):
     <div class="metric-card">
         <div class="metric-label">Avg Latency</div>
         <div class="metric-val">{avg_lat:.2f} <span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Jitter (StdDev σ)</div>
+        <div class="metric-val" style="color: var(--accent-purple);">{avg_jitter:.2f} <span class="metric-unit">ms</span></div>
     </div>
     <div class="metric-card">
         <div class="metric-label">p95 Latency</div>
@@ -615,12 +637,8 @@ class MonitorNode(Node):
         <div class="metric-val" style="color: var(--accent-teal);">{freq_hz:.1f} <span class="metric-unit">Hz</span></div>
     </div>
     <div class="metric-card">
-        <div class="metric-label">Total Sampel</div>
-        <div class="metric-val">{total_samples:,} <span class="metric-unit">pesan</span></div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Total Paket Drop</div>
-        <div class="metric-val" style="color: { 'var(--accent-red)' if total_gaps > 0 else 'var(--text-primary)' };">{total_gaps} <span class="metric-unit">gaps</span></div>
+        <div class="metric-label">Total Sampel / Gaps</div>
+        <div class="metric-val">{total_samples:,} <span class="metric-unit">/ {total_gaps} drop</span></div>
     </div>
 </div>
 
@@ -631,20 +649,43 @@ class MonitorNode(Node):
     </div>
 </div>''' if events_list else '' }
 
-<div class="chart-box">
-    <h3>1. Fluktuasi Latensi Kontinu (Detik demi Detik)</h3>
-    <p>Grafik garis waktu menunjukkan nilai rata-rata, p95, p99, dan sebaran jitter per detik.</p>
-    <div class="chart-canvas-container">
-        <canvas id="chartLatency"></canvas>
+<div class="charts-grid">
+    <div class="chart-box">
+        <h3>(a) Latensi Operasional: Rata-rata & Puncak (Avg vs Max)</h3>
+        <p>Menunjukkan latensi tipikal (Avg) vs lonjakan tertinggi (Max) per detik.</p>
+        <div class="chart-canvas-container">
+            <canvas id="chartAvgMax"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-box">
+        <h3>(b) Tail Latency: Distribusi Ekstrim (p95 & p99)</h3>
+        <p>Mendeteksi 5% (p95) dan 1% (p99) keterlambatan data terburuk akibat beban kerja.</p>
+        <div class="chart-canvas-container">
+            <canvas id="chartTail"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-box">
+        <h3>(c) Kestabilan Throughput Frekuensi (Hz)</h3>
+        <p>Laju pengiriman paket per detik terhadap baseline target 50 Hz.</p>
+        <div class="chart-canvas-container">
+            <canvas id="chartHz"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-box">
+        <h3>(d) Fluktuasi Jitter Kontinu (StdDev Latensi, ms)</h3>
+        <p>Variasi jeda antar paket per detik (Jitter σ). Menentukan kehalusan gerakan robot.</p>
+        <div class="chart-canvas-container">
+            <canvas id="chartJitter"></canvas>
+        </div>
     </div>
 </div>
 
-<div class="chart-box">
-    <h3>2. Kestabilan Throughput Frekuensi (Hz)</h3>
-    <p>Kestabilan laju pengiriman paket per detik terhadap baseline target frekuensi.</p>
-    <div class="chart-canvas-container">
-        <canvas id="chartHz"></canvas>
-    </div>
+<div class="tip-callout">
+    📖 <strong>Mengapa Jitter Sangat Krusial pada Paper & Pengujian Robotika?</strong><br>
+    Latensi konstan (misal 2.0 ms flat) sangat mudah dikompensasi oleh algoritma kontrol motor. Namun <strong>Jitter tinggi (fluktuasi latensi yang berubah-ubah tajam)</strong> menyebabkan <em>phase lag</em> acak, desinkronisasi servo, dan gerakan motor yang tersendat (*stuttering / jerky motion*). Nilai Jitter (StdDev) yang ideal untuk kontrol 50 Hz BRONE adalah <strong>&lt; 1.0 ms</strong> (sangat mulus).
 </div>
 
 <footer>
@@ -661,33 +702,82 @@ class MonitorNode(Node):
     const maxLats = history.map(h => h.max_lat || 0);
     const p95Lats = history.map(h => h.p95_lat || 0);
     const p99Lats = history.map(h => h.p99_lat || 0);
+    const stdLats = history.map(h => h.std_lat || 0);
     const hzVals  = history.map(h => h.hz || 0);
 
-    Chart.defaults.color = '#475569';
+    Chart.defaults.color = '#334155';
     Chart.defaults.font.family = "'JetBrains Mono', monospace";
     Chart.defaults.font.size = 11;
 
-    // Chart Latency
-    new Chart(document.getElementById('chartLatency'), {{
+    const commonOpts = {{
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {{
+            legend: {{ display: true, position: 'top', align: 'end', labels: {{ boxWidth: 12, font: {{ weight: '700', size: 10 }} }} }}
+        }},
+        scales: {{
+            x: {{
+                title: {{ display: true, text: 'Waktu (Detik) / Time (s)', color: '#475569', font: {{ weight: '700', size: 10 }} }},
+                grid: {{ color: 'rgba(0, 0, 0, 0.04)' }},
+                ticks: {{ maxTicksLimit: 8, font: {{ weight: '600' }} }}
+            }},
+            y: {{
+                beginAtZero: true,
+                title: {{ display: true, text: 'Nilai Terukur', color: '#475569', font: {{ weight: '700', size: 10 }} }},
+                grid: {{ color: 'rgba(0, 0, 0, 0.05)' }},
+                ticks: {{ font: {{ weight: '600' }} }}
+            }}
+        }}
+    }};
+
+    new Chart(document.getElementById('chartAvgMax'), {{
         type: 'line',
         data: {{
             labels: labels,
             datasets: [
                 {{
-                    label: 'Avg Latency',
+                    label: 'Avg Latency (ms)',
                     data: avgLats,
                     borderColor: '#0284c7',
                     backgroundColor: 'rgba(2, 132, 199, 0.08)',
-                    borderWidth: 2,
-                    fill: false,
+                    borderWidth: 2.2,
+                    fill: true,
                     tension: 0.2,
                     pointRadius: 0
                 }},
                 {{
-                    label: 'p95 Latency',
+                    label: 'Max Latency (ms)',
+                    data: maxLats,
+                    borderColor: '#ea580c',
+                    borderWidth: 2,
+                    borderDash: [3, 3],
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 0
+                }}
+            ]
+        }},
+        options: {{
+            ...commonOpts,
+            scales: {{
+                ...commonOpts.scales,
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Latensi (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+            }}
+        }}
+    }});
+
+    new Chart(document.getElementById('chartTail'), {{
+        type: 'line',
+        data: {{
+            labels: labels,
+            datasets: [
+                {{
+                    label: 'p95 Latency (ms)',
                     data: p95Lats,
                     borderColor: '#d97706',
-                    borderWidth: 2,
+                    backgroundColor: 'rgba(217, 119, 6, 0.06)',
+                    borderWidth: 2.2,
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
@@ -696,51 +786,33 @@ class MonitorNode(Node):
                     label: 'p99 Latency (Tail)',
                     data: p99Lats,
                     borderColor: '#dc2626',
-                    borderWidth: 2.2,
+                    borderWidth: 2.5,
                     fill: false,
                     tension: 0.2,
-                    pointRadius: 0
-                }},
-                {{
-                    label: 'Max Latency',
-                    data: maxLats,
-                    borderColor: '#f97316',
-                    borderWidth: 1,
-                    borderDash: [3, 3],
-                    fill: false,
                     pointRadius: 0
                 }}
             ]
         }},
         options: {{
-            responsive: true,
-            maintainAspectRatio: false,
+            ...commonOpts,
             scales: {{
-                x: {{
-                    title: {{ display: true, text: 'Waktu Pengujian (Detik) / Elapsed Time (s)', color: '#475569', font: {{ weight: '600' }} }},
-                    grid: {{ color: 'rgba(0, 0, 0, 0.04)' }}
-                }},
-                y: {{
-                    beginAtZero: true,
-                    title: {{ display: true, text: 'Latensi Komunikasi (ms)', color: '#475569', font: {{ weight: '600' }} }},
-                    grid: {{ color: 'rgba(0, 0, 0, 0.05)' }}
-                }}
+                ...commonOpts.scales,
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Tail Latency (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
             }}
         }}
     }});
 
-    // Chart Hz
     new Chart(document.getElementById('chartHz'), {{
         type: 'line',
         data: {{
             labels: labels,
             datasets: [
                 {{
-                    label: 'Frekuensi Aktual (Hz)',
+                    label: 'Throughput Aktual (Hz)',
                     data: hzVals,
                     borderColor: '#0d9488',
                     backgroundColor: 'rgba(13, 148, 136, 0.08)',
-                    borderWidth: 2,
+                    borderWidth: 2.2,
                     fill: true,
                     tension: 0.2,
                     pointRadius: 0
@@ -748,18 +820,47 @@ class MonitorNode(Node):
             ]
         }},
         options: {{
-            responsive: true,
-            maintainAspectRatio: false,
+            ...commonOpts,
             scales: {{
-                x: {{
-                    title: {{ display: true, text: 'Waktu Pengujian (Detik) / Elapsed Time (s)', color: '#475569', font: {{ weight: '600' }} }},
-                    grid: {{ color: 'rgba(0, 0, 0, 0.04)' }}
+                ...commonOpts.scales,
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Frekuensi (Hz)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+            }}
+        }}
+    }});
+
+    // 4. Chart Jitter (StdDev & Range)
+    new Chart(document.getElementById('chartJitter'), {{
+        type: 'line',
+        data: {{
+            labels: labels,
+            datasets: [
+                {{
+                    label: 'Jitter (StdDev σ, ms)',
+                    data: stdLats,
+                    borderColor: '#7c3aed',
+                    backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                    borderWidth: 2.2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0
                 }},
-                y: {{
-                    beginAtZero: true,
-                    title: {{ display: true, text: 'Throughput Frekuensi (Hz)', color: '#475569', font: {{ weight: '600' }} }},
-                    grid: {{ color: 'rgba(0, 0, 0, 0.05)' }}
+                {{
+                    label: 'Peak Range (Max - Min, ms)',
+                    data: maxLats.map((mx, idx) => Math.max(0, mx - minLats[idx])),
+                    borderColor: '#f43f5e',
+                    borderDash: [3, 3],
+                    borderWidth: 1.5,
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 0
                 }}
+            ]
+        }},
+        options: {{
+            ...commonOpts,
+            scales: {{
+                ...commonOpts.scales,
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Jitter Fluktuasi (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
             }}
         }}
     }});

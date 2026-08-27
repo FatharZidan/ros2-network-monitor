@@ -55,31 +55,31 @@ export CYCLONEDDS_URI=file:///home/<user>/cyclonedds.xml
 ┌─────────────────────┐                     ┌──────────────────────────────────┐
 │  dummy_publisher.py │    /test_topic      │  network_monitor.py (CLI)        │
 │                     │   ─── DDS ──────▶   │  network_monitor_gui.py (Web)    │
-│  Kirim:             │   String + JSON     │                                  │
-│   • seq number      │   (CycloneDDS)      │  Terima & Hitung:                │
-│   • timestamp       │                     │   • Frekuensi (Hz)               │
-│                     │                     │   • Latency (ms)                 │
-│                     │                     │   • Statistik/detik              │
+│  Kirim:             │   UInt8MultiArray   │                                  │
+│   • Packed Binary   │   (16-byte struct)  │  Terima & Hitung:                │
+│   • seq & timestamp │   (CycloneDDS)      │   • Frekuensi (Hz)               │
+│                     │                     │   • Latency & Jitter (ms)        │
+│                     │                     │   • p95 / p99 Tail Latency       │
 └─────────────────────┘                     └───────────┬──────────────────────┘
-                                                        │ (GUI only)
-                                                        │ HTTP :8080
+                                                        │ (Web GUI Dashboard)
+                                                        │ HTTP :8765
                                                         ▼
-                                            ┌──────────────────────┐
-                                            │  Browser (Windows/   │
-                                            │  Ubuntu/HP apapun)   │
-                                            │  dashboard.html      │
-                                            │   • Grafik real-time │
-                                            │   • Kartu metrik     │
-                                            │   • Clock skew alert │
-                                            └──────────────────────┘
+                                            ┌──────────────────────────────────┐
+                                            │  Browser Laptop (WiFi/ZeroTier)  │
+                                            │  dashboard.html (Light Mode)     │
+                                            │   • ⏱️ Session Control & Timer    │
+                                            │   • 📌 Event Marker Toolbar      │
+                                            │   • 📊 4 Grafik Kompak Paper/PPT │
+                                            │   • 📥 Direct CSV & HTML Report  │
+                                            └──────────────────────────────────┘
 ```
 
 ### Dua Mode Monitoring
 
 | Mode | File | Output | Kapan Dipakai |
 |------|------|--------|---------------|
-| **CLI** | `network_monitor.py` | Log teks di terminal | SSH tanpa browser, debugging cepat |
-| **Web GUI** | `network_monitor_gui.py` + `dashboard.html` | Dashboard grafis di browser | Demo, presentasi, monitoring jangka panjang |
+| **Web GUI (Recommended)** | `network_monitor_gui.py` + `dashboard.html` | Dashboard Web (`http://<IP>:8765`) | Visualisasi live, Timer Sesi, Event Marker, Download CSV & Visual Report ke Laptop |
+| **CLI Batch** | `network_monitor.py` | Log teks terminal & Auto-CSV | SSH cepat tanpa browser, headless scripting, stress test |
 
 ---
 
