@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
         :root {
-            /* Light Mode Palette — Soft, eye-friendly, comfortable */
+            /* Light Mode Palette */
             --bg-primary: #f8fafc;
             --bg-secondary: #ffffff;
             --bg-card: #ffffff;
@@ -21,7 +21,7 @@
             --text-secondary: #475569;
             --text-muted: #94a3b8;
             
-            /* Metric Accents (Light Mode optimized) */
+            /* Metric Accents */
             --accent-hz: #0d9488;
             --accent-latency: #e11d48;
             --accent-jitter: #7c3aed;
@@ -31,7 +31,6 @@
             --accent-p95: #d97706;
             --accent-p99: #dc2626;
             --accent-miss: #e11d48;
-            --accent-skew: #7c3aed;
             
             --warning-bg: #fffbeb;
             --warning-border: #fde68a;
@@ -72,7 +71,7 @@
             width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 18px;
         }
 
         /* Header */
@@ -93,7 +92,6 @@
             gap: 18px;
         }
 
-        /* 2 Logos Container */
         .logos-wrapper {
             display: flex;
             align-items: center;
@@ -105,24 +103,18 @@
         }
 
         .header-logo {
-            height: 42px;
+            height: 40px;
             width: auto;
             object-fit: contain;
-            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));
-            transition: transform 0.2s ease;
         }
 
         .logo-globalizing {
-            height: 36px;
-        }
-
-        .header-logo:hover {
-            transform: scale(1.04);
+            height: 34px;
         }
 
         .logo-divider {
             width: 1px;
-            height: 28px;
+            height: 26px;
             background: var(--border-subtle);
         }
 
@@ -136,7 +128,6 @@
         .header-title p {
             font-size: 13px;
             color: var(--text-secondary);
-            font-weight: 400;
         }
 
         .header-right {
@@ -167,7 +158,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             padding: 6px 14px;
             border-radius: 20px;
@@ -183,10 +174,6 @@
             background: #e0f2fe;
             border-color: #7dd3fc;
             transform: translateY(-1px);
-        }
-
-        .btn-download:active {
-            transform: translateY(0);
         }
 
         .btn-report {
@@ -261,7 +248,7 @@
             background-color: var(--warning-bg);
             border: 1px solid var(--warning-border);
             color: var(--warning-text);
-            padding: 14px 18px;
+            padding: 12px 18px;
             border-radius: var(--radius);
             align-items: center;
             gap: 12px;
@@ -272,28 +259,16 @@
             display: flex;
         }
 
-        .warn-icon {
-            font-size: 18px;
-        }
-
-        .clock-skew-banner code {
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(0, 0, 0, 0.06);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 600;
         /* Session Control & Timer Panel */
         .session-panel {
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 18px 24px;
+            padding: 16px 20px;
             box-shadow: var(--shadow-card);
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            position: relative;
-            overflow: hidden;
+            gap: 12px;
         }
 
         .session-top-row {
@@ -301,7 +276,7 @@
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            gap: 16px;
+            gap: 14px;
         }
 
         .session-controls {
@@ -322,12 +297,6 @@
             background: #f8fafc;
             outline: none;
             cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .select-duration:focus {
-            border-color: #3b82f6;
-            background: #ffffff;
         }
 
         .btn-session {
@@ -392,7 +361,6 @@
             font-weight: 700;
             padding: 4px 12px;
             border-radius: 20px;
-            letter-spacing: 0.3px;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -425,7 +393,7 @@
 
         .session-timer-text {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--text-primary);
         }
@@ -435,7 +403,6 @@
             background: #f1f5f9;
             border-radius: 4px;
             overflow: hidden;
-            position: relative;
         }
 
         .progress-bar-fill {
@@ -451,13 +418,12 @@
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 14px 20px;
+            padding: 12px 18px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
+            gap: 14px;
             box-shadow: var(--shadow-card);
-            flex-wrap: wrap;
         }
 
         .event-input-wrapper {
@@ -465,11 +431,6 @@
             align-items: center;
             gap: 10px;
             flex: 1;
-            min-width: 320px;
-        }
-
-        .event-icon {
-            font-size: 16px;
         }
 
         .event-input {
@@ -482,13 +443,11 @@
             color: var(--text-primary);
             background: #f8fafc;
             outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         .event-input:focus {
             border-color: #3b82f6;
             background: #ffffff;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .btn-event {
@@ -500,87 +459,30 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
             white-space: nowrap;
         }
 
         .btn-event:hover {
             background: #1d4ed8;
-            transform: translateY(-1px);
-        }
-
-        /* Event Log Box */
-        .event-log-container {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius);
-            padding: 16px 20px;
-            box-shadow: var(--shadow-card);
-        }
-
-        .event-log-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .event-log-title {
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .event-tags-list {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-
-        .event-badge-item {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 6px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            color: #1d4ed8;
-            display: flex;
-            align-items: center;
-            gap: 4px;
         }
 
         /* Metrics Grid: 3 columns x 3 rows */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            gap: 14px;
         }
 
         .metric-card {
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 18px 20px;
+            padding: 16px 18px;
             position: relative;
             overflow: hidden;
             box-shadow: var(--shadow-card);
-            transition: transform 0.2s, box-shadow 0.2s;
             display: flex;
             flex-direction: column;
-        }
-
-        .metric-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-hover);
         }
 
         .metric-card::before {
@@ -606,7 +508,7 @@
             text-transform: uppercase;
             letter-spacing: 0.6px;
             color: var(--text-secondary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
             font-weight: 600;
         }
 
@@ -618,7 +520,7 @@
 
         .metric-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 700;
             color: var(--text-primary);
         }
@@ -643,14 +545,14 @@
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 18px 20px;
             box-shadow: var(--shadow-card);
             display: flex;
             flex-direction: column;
         }
 
         .chart-header {
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .chart-title {
@@ -667,7 +569,7 @@
 
         .chart-container {
             position: relative;
-            height: 250px;
+            height: 240px;
             width: 100%;
         }
 
@@ -676,69 +578,62 @@
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius);
-            padding: 24px;
+            padding: 22px;
             box-shadow: var(--shadow-card);
-            margin-top: 8px;
+            margin-top: 4px;
         }
 
         .guide-header {
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             border-bottom: 1px solid var(--border-subtle);
-            padding-bottom: 14px;
+            padding-bottom: 12px;
         }
 
         .guide-header h2 {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
         .guide-header p {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
-            margin-top: 4px;
+            margin-top: 2px;
         }
 
         .guide-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            gap: 18px;
         }
 
         .guide-box {
             background: #f8fafc;
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-sm);
-            padding: 18px;
+            padding: 16px;
         }
 
         .guide-box-title {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             color: var(--text-primary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            margin-bottom: 12px;
         }
 
         .dict-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
 
         .dict-item {
             font-size: 12px;
-            line-height: 1.6;
+            line-height: 1.5;
             color: var(--text-secondary);
             border-bottom: 1px dashed var(--border-subtle);
-            padding-bottom: 10px;
+            padding-bottom: 8px;
         }
 
         .dict-item:last-child {
@@ -753,16 +648,15 @@
             background: #e2e8f0;
             padding: 2px 6px;
             border-radius: 4px;
-            margin-right: 6px;
+            margin-right: 4px;
             font-size: 11px;
         }
 
-        /* Quality Reference Table */
         .quality-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .quality-table th, .quality-table td {
@@ -794,34 +688,31 @@
         .tip-callout {
             background: #eff6ff;
             border-left: 3px solid #3b82f6;
-            padding: 10px 14px;
+            padding: 10px 12px;
             border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-            font-size: 12px;
+            font-size: 11px;
             color: #1e40af;
             line-height: 1.5;
-            margin-top: 12px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 16px;
+            color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border-subtle);
+            margin-top: auto;
         }
 
         @media (max-width: 900px) {
-            .metrics-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            .charts-grid, .guide-grid {
-                grid-template-columns: 1fr;
-            }
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 16px;
-            }
-            .header-right {
-                align-items: flex-start;
-            }
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid, .guide-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; align-items: flex-start; gap: 14px; }
+            .header-right { align-items: flex-start; }
         }
         @media (max-width: 600px) {
-            .metrics-grid {
-                grid-template-columns: 1fr;
-            }
+            .metrics-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -831,9 +722,8 @@
     <!-- Header -->
     <header class="header">
         <div class="header-left">
-            <!-- 2 Logos: UB Emblem & Globalizing UB -->
             <div class="logos-wrapper">
-                <img src="/logo_ub.png" alt="Logo Universitas Brawijaya" class="header-logo logo-ub" title="Universitas Brawijaya" />
+                <img src="/logo_ub.png" alt="Logo Universitas Brawijaya" class="header-logo" title="Universitas Brawijaya" />
                 <div class="logo-divider"></div>
                 <img src="/logo_globalizing.png" alt="Logo Globalizing UB" class="header-logo logo-globalizing" title="Globalizing UB" />
             </div>
@@ -874,12 +764,11 @@
 
     <!-- Clock Skew Alert -->
     <div class="clock-skew-banner" id="clockSkewBanner">
-        <span class="warn-icon">⚠️</span>
+        <span style="font-size: 18px;">⚠️</span>
         <span>
             <strong>Clock Skew Terdeteksi!</strong> Ditemukan
             <span id="negativeCount">0</span> pesan dengan latency negatif.
             Sinkronkan jam antar mesin menggunakan <code>chrony</code>.
-            Nilai latency <strong>tidak dapat dipercaya</strong> sampai clock sinkron.
         </span>
     </div>
 
@@ -920,7 +809,7 @@
     <!-- Event Marker Toolbar Panel -->
     <div class="event-panel">
         <div class="event-input-wrapper">
-            <span class="event-icon">📌</span>
+            <span style="font-size: 16px;">📌</span>
             <input type="text" class="event-input" id="inputEventText" placeholder="Ketik catatan event / perintah (misal: Eksekusi Skrip A, Beban GPU Nyala, dsb)..." />
             <button class="btn-event" id="btnSendEvent" onclick="submitEventMarker()">
                 <span>+ Tandai Event</span>
@@ -930,7 +819,6 @@
 
     <!-- Metric Cards Grid (3 cols x 3 rows) -->
     <div class="metrics-grid">
-        <!-- Row 1 -->
         <div class="metric-card card-hz">
             <div class="metric-label">Frekuensi</div>
             <div class="metric-value-container">
@@ -953,7 +841,6 @@
             </div>
         </div>
 
-        <!-- Row 2 -->
         <div class="metric-card card-max-lat">
             <div class="metric-label">Max Latency</div>
             <div class="metric-value-container">
@@ -969,14 +856,13 @@
             </div>
         </div>
         <div class="metric-card card-total">
-            <div class="metric-label">Total Pesan</div>
+            <div class="metric-label">Total Sampel</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valTotal">0</span>
                 <span class="metric-unit">pesan</span>
             </div>
         </div>
 
-        <!-- Row 3 -->
         <div class="metric-card p95">
             <div class="metric-label">p95 Latency</div>
             <div class="metric-value-container">
@@ -985,14 +871,14 @@
             </div>
         </div>
         <div class="metric-card p99">
-            <div class="metric-label">p99 Latency</div>
+            <div class="metric-label">p99 Latency (Tail)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valP99">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card miss-rate">
-            <div class="metric-label">Miss Rate</div>
+            <div class="metric-label">Miss Rate (Drop)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valMissRate">0.00</span>
                 <span class="metric-unit">%</span>
@@ -1002,7 +888,6 @@
 
     <!-- Charts Grid (2x2) -->
     <div class="charts-grid">
-        <!-- Chart 1: Hz -->
         <div class="chart-card">
             <div class="chart-header">
                 <div class="chart-title">Frekuensi Pesan</div>
@@ -1013,7 +898,6 @@
             </div>
         </div>
 
-        <!-- Chart 2: Latency (Avg, Min, Max) -->
         <div class="chart-card">
             <div class="chart-header">
                 <div class="chart-title">Statistik Latensi</div>
@@ -1024,7 +908,6 @@
             </div>
         </div>
 
-        <!-- Chart 3: Percentile Latency (p95, p99) -->
         <div class="chart-card">
             <div class="chart-header">
                 <div class="chart-title">Percentile Latency (p95 / p99)</div>
@@ -1035,7 +918,6 @@
             </div>
         </div>
 
-        <!-- Chart 4: Clock Skew Tracker -->
         <div class="chart-card">
             <div class="chart-header">
                 <div class="chart-title">Clock Skew Tracker</div>
@@ -1047,7 +929,7 @@
         </div>
     </div>
 
-    <!-- Section: Panduan & Kamus Parameter Kualitas Jaringan (Bisa di-scroll) -->
+    <!-- Section: Panduan & Kamus Parameter Kualitas Jaringan -->
     <section class="guide-section" id="guideSection">
         <div class="guide-header">
             <h2>📖 Panduan & Kamus Parameter Kualitas Jaringan BRONE</h2>
@@ -1055,7 +937,6 @@
         </div>
 
         <div class="guide-grid">
-            <!-- Kolom 1: Kamus Metrik -->
             <div class="guide-box">
                 <div class="guide-box-title">📊 1. Kamus Metrik Pengukuran</div>
                 <div class="dict-list">
@@ -1087,7 +968,6 @@
                 </div>
             </div>
 
-            <!-- Kolom 2: Acuan Standar Kualitas Berbasis Subsistem -->
             <div class="guide-box">
                 <div class="guide-box-title">🎯 2. Standar Kualitas Realistis (Berdasarkan Subsistem Robot)</div>
                 <table class="quality-table">
@@ -1180,7 +1060,6 @@
 
     // State
     let lastTotal = -1;
-    let currentSessionState = 'IDLE';
 
     // Chart.js Light Mode Defaults
     Chart.defaults.color = '#475569';
@@ -1362,7 +1241,6 @@
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    // Session Control Functions
     async function startSession() {
         const duration = parseInt(selectDuration.value, 10);
         try {
@@ -1371,33 +1249,27 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ duration: duration })
             });
-            if (res.ok) {
-                update();
-            }
+            if (res.ok) update();
         } catch (e) {
-            console.error('Gagal memulai sesi:', e);
+            console.error('Gagal start:', e);
         }
     }
 
     async function stopSession() {
         try {
             const res = await fetch('/api/session/stop', { method: 'POST' });
-            if (res.ok) {
-                update();
-            }
+            if (res.ok) update();
         } catch (e) {
-            console.error('Gagal menghentikan sesi:', e);
+            console.error('Gagal stop:', e);
         }
     }
 
     async function resetSession() {
         try {
             const res = await fetch('/api/session/reset', { method: 'POST' });
-            if (res.ok) {
-                update();
-            }
+            if (res.ok) update();
         } catch (e) {
-            console.error('Gagal me-reset sesi:', e);
+            console.error('Gagal reset:', e);
         }
     }
 
@@ -1415,7 +1287,7 @@
                 update();
             }
         } catch (e) {
-            console.error('Gagal mengirim event marker:', e);
+            console.error('Gagal submit event:', e);
         }
     }
 
@@ -1433,9 +1305,7 @@
             const c = data.current || {};
             const h = data.history || [];
 
-            currentSessionState = session.state;
-
-            // Update Session Controls & Badges
+            // Session UI Update
             if (session.state === 'RUNNING') {
                 sessionBadge.className = 'session-state-badge state-running';
                 sessionBadgeText.textContent = '🔴 RECORDING (MEREKAM DATA)';
@@ -1525,7 +1395,7 @@
                 clockBanner.classList.remove('show');
             }
 
-            // Charts Update from Session History
+            // Charts Update
             const labels = h.map(p => `${p.elapsed || 0}s`);
             
             chartHz.data.labels = labels;
