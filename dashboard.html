@@ -751,9 +751,6 @@
                     </svg>
                     <span>Download Visual Report</span>
                 </a>
-                <div class="cuda-badge" id="cudaBadge">
-                    <span id="cudaText">CUDA: OFF</span>
-                </div>
                 <div class="status-badge offline" id="statusBadge">
                     <span class="status-dot"></span>
                     <span id="statusText">Menunggu data…</span>
@@ -921,11 +918,11 @@
             </div>
         </div>
 
-        <!-- Chart 4: Continuous Jitter Stability -->
+        <!-- Chart 4: Clock Skew & Jitter Stability -->
         <div class="chart-card">
             <div class="chart-header">
-                <div class="chart-title">(d) Stabilitas Jitter Kontinu (ms)</div>
-                <div class="chart-subtitle">Fluktuasi jeda antar-paket (StdDev σ). Krusial untuk motor robot.</div>
+                <div class="chart-title">(d) Clock Skew & Jitter Tracker</div>
+                <div class="chart-subtitle">Latensi sampel vs garis 0 ms (Clock Sync) & Jitter StdDev σ (ms)</div>
             </div>
             <div class="chart-container">
                 <canvas id="chartSkew"></canvas>
@@ -937,10 +934,11 @@
     <section class="guide-section" id="guideSection">
         <div class="guide-header">
             <h2>📖 Panduan & Kamus Parameter Kualitas Jaringan BRONE</h2>
-            <p>Penjelasan praktis mengenai arti setiap metrik pengukuran dan standar batas kualitas komunikasi pada robot.</p>
+            <p>Penjelasan praktis mengenai arti setiap metrik pengukuran, evaluasi Clock Skew, dan standar kualitas komunikasi robot.</p>
         </div>
 
         <div class="guide-grid">
+            <!-- Box 1: Kamus Metrik -->
             <div class="guide-box">
                 <div class="guide-box-title">📊 1. Kamus Metrik Pengukuran (Academic Metrics)</div>
                 <div class="dict-list">
@@ -955,8 +953,12 @@
                     </div>
                     <div class="dict-item">
                         <span class="dict-term">Jitter (StdDev σ, ms)</span>
-                        <strong>Fluktuasi variasi jeda antar-paket.</strong><br>
+                        <strong>Tingkat fluktuasi/variasi jeda antar-paket.</strong><br>
                         <em>Mengapa krusial di paper robotika?</em> Latensi tetap (misal 2.0 ms konstan) sangat mudah dikompensasi kontroler, tetapi <strong>Jitter tinggi menyebabkan pergerakan servo motor tersendat (*jerky / stuttering*)</strong>. Standar BRONE: Jitter ideal <strong>&lt; 1.0 ms</strong> (sangat mulus).
+                    </div>
+                    <div class="dict-item">
+                        <span class="dict-term">Clock Skew (ms)</span>
+                        <strong>Perbedaan offset jam internal CPU NUC vs CPU Jetson.</strong> Memastikan latensi selalu bernilai positif di atas garis acuan <code>0 ms</code>.
                     </div>
                     <div class="dict-item">
                         <span class="dict-term">p95 & p99 Tail Latency (ms)</span>
@@ -970,48 +972,65 @@
                 </div>
             </div>
 
+            <!-- Box 2: Standar Kualitas & Clock Skew Table -->
             <div class="guide-box">
-                <div class="guide-box-title">🎯 2. Standar Kualitas Realistis (Berdasarkan Subsistem Robot)</div>
+                <div class="guide-box-title">🧭 2. Panduan & Diagnosa Clock Skew (Sinkronisasi Jam)</div>
                 <table class="quality-table">
                     <thead>
                         <tr>
-                            <th>Subsistem & Jalur Komunikasi</th>
-                            <th>Target Loop (Period T)</th>
-                            <th>Ideal</th>
-                            <th>Batas Aman Toleransi</th>
-                            <th>Kritis (Desinkron)</th>
+                            <th>Status Jam Mesin</th>
+                            <th>Nilai Latensi Terukur</th>
+                            <th>Arti Kondisi Lapangan</th>
+                            <th>Tindakan Penguji</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>
-                                <strong>Kontrol Motor OP3</strong><br>
-                                <span style="font-size: 10px; color: var(--text-muted);">State Machine / Trajectory (LAN Kabel)</span>
-                            </td>
+                            <td><span class="badge-quality quality-good">🟢 Sinkron Presisi</span></td>
+                            <td>Latensi &gt; 0 ms (di atas garis 0)</td>
+                            <td>Jam NUC & Jetson sinkron presisi (offset &lt; 0.1 ms)</td>
+                            <td>Data 100% valid untuk paper</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge-quality quality-fair">🟡 Clock Drift</span></td>
+                            <td>Latensi perlahan naik/turun</td>
+                            <td>Osilator kristal salah satu mesin bergeser perlahan</td>
+                            <td>Jalankan <code>chrony</code> di background</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge-quality quality-poor">🔴 Clock Skew (Minus)</span></td>
+                            <td>Latensi &lt; 0 ms (di bawah garis 0)</td>
+                            <td>Jam Jetson mendahului jam NUC (jam beda)</td>
+                            <td><strong>Wajib sync jam</strong> via <code>chrony</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="guide-box-title" style="margin-top: 14px;">🎯 3. Standar Kualitas Realistis (Period Budgeting)</div>
+                <table class="quality-table">
+                    <thead>
+                        <tr>
+                            <th>Subsistem Robot</th>
+                            <th>Target Loop (Period T)</th>
+                            <th>Ideal</th>
+                            <th>Batas Aman Toleransi</th>
+                            <th>Kritis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Kontrol Motor OP3</strong></td>
                             <td>50 Hz (20 ms)</td>
                             <td><span class="badge-quality quality-good">&lt; 5 ms</span></td>
                             <td><span class="badge-quality quality-fair">5 – 15 ms</span></td>
                             <td><span class="badge-quality quality-poor">&gt; 20 ms</span></td>
                         </tr>
                         <tr>
-                            <td>
-                                <strong>Pipa Persepsi AI</strong><br>
-                                <span style="font-size: 10px; color: var(--text-muted);">YOLOv11s + FER v2 (Jetson ➔ NUC)</span>
-                            </td>
+                            <td><strong>Pipa Visi AI YOLO</strong></td>
                             <td>30 Hz (33 ms)</td>
                             <td><span class="badge-quality quality-good">&lt; 35 ms</span></td>
                             <td><span class="badge-quality quality-fair">35 – 70 ms</span></td>
                             <td><span class="badge-quality quality-poor">&gt; 100 ms</span></td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <strong>Telemetri Dashboard GUI</strong><br>
-                                <span style="font-size: 10px; color: var(--text-muted);">Monitoring Laptop (WiFi / ZeroTier)</span>
-                            </td>
-                            <td>10–20 Hz (50-100 ms)</td>
-                            <td><span class="badge-quality quality-good">&lt; 40 ms</span></td>
-                            <td><span class="badge-quality quality-fair">40 – 100 ms</span></td>
-                            <td><span class="badge-quality quality-poor">&gt; 150 ms</span></td>
                         </tr>
                     </tbody>
                 </table>
@@ -1045,8 +1064,6 @@
     const statusText = document.getElementById('statusText');
     const clockBanner = document.getElementById('clockSkewBanner');
     const negCount = document.getElementById('negativeCount');
-    const cudaBadge = document.getElementById('cudaBadge');
-    const cudaText = document.getElementById('cudaText');
 
     // DOM Elements - Session Control & Events
     const selectDuration = document.getElementById('selectDuration');
@@ -1194,27 +1211,27 @@
         }
     });
 
-    // Chart 4: Continuous Jitter Stability (StdDev & Peak Range)
+    // Chart 4: Clock Skew Tracker & Jitter Stability
     const ctxSkew = document.getElementById('chartSkew').getContext('2d');
     const chartSkew = new Chart(ctxSkew, {
         type: 'line',
         data: { labels: [], datasets: [
             {
-                label: 'Jitter (StdDev σ, ms)',
+                label: 'Latensi Terukur (Clock Skew, ms)',
                 data: [],
                 borderColor: '#7c3aed',
-                backgroundColor: 'rgba(124, 58, 237, 0.08)',
-                borderWidth: 2.2,
-                fill: true,
+                backgroundColor: 'rgba(124, 58, 237, 0.06)',
+                borderWidth: 2,
+                fill: false,
                 tension: 0.2,
                 pointRadius: 0
             },
             {
-                label: 'Peak Range (Max-Min, ms)',
+                label: 'Jitter (StdDev σ, ms)',
                 data: [],
-                borderColor: '#f43f5e',
+                borderColor: '#0284c7',
+                borderWidth: 2,
                 borderDash: [3, 3],
-                borderWidth: 1.5,
                 fill: false,
                 tension: 0.2,
                 pointRadius: 0
@@ -1228,9 +1245,15 @@
             scales: {
                 ...commonOptions.scales,
                 y: {
-                    beginAtZero: true,
+                    beginAtZero: false,
+                    suggestedMin: -2,
+                    suggestedMax: 4,
+                    grid: {
+                        color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(0, 0, 0, 0.05)',
+                        lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
+                    },
                     ticks: { callback: v => v + ' ms', color: '#64748b' },
-                    title: { display: true, text: 'Jitter Fluktuasi (ms)', color: '#475569', font: { size: 11, weight: '700' } }
+                    title: { display: true, text: 'Latensi & Jitter (ms)', color: '#475569', font: { size: 11, weight: '700' } }
                 }
             }
         }
@@ -1364,19 +1387,6 @@
             }
             lastTotal = c.total;
 
-            // CUDA Badge
-            if (c.cuda_active) {
-                cudaBadge.style.background = '#dcfce7';
-                cudaBadge.style.borderColor = '#86efac';
-                cudaBadge.style.color = '#15803d';
-                cudaText.textContent = 'CUDA: ACTIVE';
-            } else {
-                cudaBadge.style.background = '#f8fafc';
-                cudaBadge.style.borderColor = '#e2e8f0';
-                cudaBadge.style.color = '#64748b';
-                cudaText.textContent = 'CUDA: OFF';
-            }
-
             // Metrics Update
             valHz.textContent = (c.hz || 0).toFixed(1);
             valAvgLat.textContent = (c.avg_lat || 0).toFixed(2);
@@ -1414,8 +1424,8 @@
             chartPercentile.update('none');
 
             chartSkew.data.labels = labels;
-            chartSkew.data.datasets[0].data = h.map(p => p.std_lat || 0);
-            chartSkew.data.datasets[1].data = h.map(p => Math.max(0, (p.max_lat || 0) - (p.min_lat || 0)));
+            chartSkew.data.datasets[0].data = h.map(p => p.last_latency || 0);
+            chartSkew.data.datasets[1].data = h.map(p => p.std_lat || 0);
             chartSkew.update('none');
 
         } catch (e) {
