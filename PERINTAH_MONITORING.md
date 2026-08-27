@@ -32,8 +32,16 @@ echo "RMW: $RMW_IMPLEMENTATION | DOMAIN_ID: $ROS_DOMAIN_ID"
 ## 🚀 FASE 1: Eksekusi Pengujian (Pilih Skenario)
 
 Tersedia **2 Metode Pengujian**:
-- **Metode A (Web GUI Dashboard):** Visualisasi live di browser + Tombol **Download CSV**.
-- **Metode B (CLI Batch Runner):** Otomatis berjalan N sampel, berhenti sendiri, dan otomatis membuat file CSV.
+- **Metode A (Web GUI Dashboard — Recommended):** Visualisasi live di browser laptop, fitur **📌 Penanda Event (Garis Vertikal)**, dan tombol **Download CSV langsung ke laptop**.
+- **Metode B (CLI Batch Runner):** Berjalan otomatis N sampel, berhenti sendiri, dan mencatat log CSV.
+
+> 💡 **Fitur Baru: 📌 Event Marker / Garis Vertikal Penanda Perintah**
+> * **Via Browser Laptop:** Saat monitoring sedang berjalan di Web GUI, ketik catatan pada kotak input atas (misal: `Mulai YOLO`, `Perintah Wave`, `Beban CUDA Aktif`) lalu klik **`+ Tandai Event`**.
+> * **Via CLI Robot:** Jika ada node atau operator yang mem-publish ke topik `/brone/command` (misal: `init`, `wave`, `talk`), sistem otomatis mencatat garis vertikal pada detik yang tepat.
+> * Garis vertikal ini akan otomatis tergambar pada grafik laporan akhir untuk membuktikan dampak beban kerja terhadap latensi!
+
+> 💾 **Penyimpanan Bebas Beban (Direct Download ke Laptop):**
+> Klik tombol **"Download CSV"** di pojok kanan atas browser laptop. File log `.csv` akan langsung terunduh ke folder `Downloads` laptop Anda tanpa membebani media penyimpanan NUC/Jetson.
 
 ---
 
@@ -58,13 +66,14 @@ cd ~/ros2_network_monitor
 
 python3 network_monitor_gui.py --ros-args -p topology:=nuc2nuc
 ```
-👉 *Buka Browser: `http://10.101.143.111:8765` (atau `http://localhost:8765`). Klik **"Download CSV"** kapan saja untuk menyimpan data.*
+👉 *Buka Browser di Laptop: `http://10.101.143.111:8765` (atau `http://localhost:8765`). Klik **"Download CSV"** kapan saja untuk menyimpan data.*
 
 *(Atau Metode CLI Auto-CSV: `python3 network_monitor.py --topology nuc2nuc --samples 1000`)*
 
 ---
 
 ### Skenario 2: Uji Baseline JETSON Internal (`jetson2jetson`)
+*(Berlaku untuk Jetson Visi BRONE maupun Jetson Omniwheel mandiri. Pengujian intra-host 1 CPU ini 100% bebas dari clock skew).*
 
 **Terminal 1 JETSON (Publisher):**
 ```bash
@@ -85,7 +94,7 @@ cd ~/ros2_network_monitor
 
 python3 network_monitor_gui.py --ros-args -p topology:=jetson2jetson
 ```
-👉 *Buka Browser: `http://10.101.143.169:8765` (atau `http://localhost:8765`).*
+👉 *Buka Browser di Laptop: `http://10.101.143.169:8765` (atau `http://localhost:8765`).*
 
 *(Atau Metode CLI Auto-CSV: `python3 network_monitor.py --topology jetson2jetson --samples 1000`)*
 
