@@ -67,15 +67,44 @@ Sistem monitoring jaringan yang dikembangkan saat ini berhasil membuktikan keand
 
 ---
 
+### 6. Disclaimer Ruang Lingkup & Batasan Pengukuran (*Scope & Limitations*)
+
+Untuk menjaga integritas ilmiah dan mencegah salah interpretasi data saat sidang atau penulisan jurnal, batas-batas pengukuran program ini didefinisikan secara tegas sebagai berikut:
+
+#### A. Apa yang Benar-Benar Diukur (*In-Scope*):
+1. **Transport Latency & Jitter Lapisan DDS (ROS 2):**
+   * Waktu serialisasi struct biner (16-byte header + padding) pada `rclpy`.
+   * Waktu transmisi protokol RTPS UDP/IP melalui middleware *CycloneDDS*.
+   * Waktu transit fisik melintasi **kabel LAN tembaga RJ45 Point-to-Point** (`192.168.100.x`) antar prosesor internal robot (Intel NUC ↔ NVIDIA Jetson).
+   * Waktu deserialisasi pada penerima hingga data siap dieksekusi oleh *callback* ROS 2.
+
+---
+
+#### B. Apa yang Berada di Luar Spesifikasi / Batasan (*Out-of-Scope*):
+1. 📶 **Latensi Wi-Fi / SSH / ZeroTier Laptop ke Robot (Off-Board Telemetry):**
+   * Sinyal nirkabel Wi-Fi laptop penguji (SSH/Browser) memiliki latensi acak ($\sim 20\text{ -- }100\text{ ms}$) akibat interferensi radio 2.4/5 GHz dan *CSMA/CA backoff*.
+   * Latensi Wi-Fi ini **BUKAN** bagian dari kontrol internal robot dan **TIDAK** diukur oleh angka latensi di dashboard. Angka $\sim 1.2\text{ ms}$ di dashboard adalah waktu tempuh murni di kabel LAN robot.
+2. 🔌 **Latensi Serial Bus Dynamixel / RS-485 / OpenCR / U2D2:**
+   * Waktu transmisi fisik dari port USB/UART NUC ke mikrokontroler OpenCR/U2D2 dan propagasi sinyal serial RS-485 ke rantai motor servo Dynamixel (orde $\sim 1\text{ -- }3\text{ ms}$).
+   * Monitor mengukur lapisan transportasi pesan ROS 2, bukan *hardware bus latency* Dynamixel.
+3. 👁️ **Latensi Pemrosesan Sensor & Inferensi AI (Sensor Exposure & GPU Compute Time):**
+   * Waktu eksposur sensor optik kamera CMOS (*rolling/global shutter* $\sim 15\text{ -- }30\text{ ms}$) dan waktu eksekusi inferensi tensor GPU AI (*YOLOv11s / FER v2* $\sim 20\text{ -- }50\text{ ms}$).
+   * Waktu tersebut adalah **Latensi Komputasi (*Processing Latency*)**, bukan latensi transportasi jaringan. Monitor mengukur seberapa cepat hasil inferensi tersebut dipublikasikan dan ditransmisikan ke otak gerak.
+4. ⏰ **Dependensi Presisi Sinkronisasi Waktu (*Clock Sync Dependency*):**
+   * Pengukuran latensi satu arah lintas mesin (*Inter-host*) mengasumsikan kedua komputer telah disinkronkan jam internalnya via protokol `chrony` (akurasi sub-milidetik pada LAN kabel).
+
+---
+
 ## 🛠️ Matriks Rencana Tindak Lanjut & Validasi Lapangan
 
 | No | Aspek Evaluasi | Aksi Perbaikan / Verifikasi | Status |
-| :--- | :--- | :--- | :---: |
+| :--- | :--- | :--- | :--- : |
 | 1 | **Tabel Acuan Kualitas** | Mengganti ambang batas tunggal dengan matriks berbasis subsistem (*Period Budgeting*: 20ms Motor, 33ms Visi, 100ms WiFi). | **SELESAI (Di Dashboard)** |
 | 2 | **Fitur Anotasi Dinamis** | Menyediakan *Event Marker* (garis vertikal) untuk mencatat momen aktivasi program berat (YOLO/FER/Gerak) pada grafik kontinu. | **SELESAI** |
-| 3 | **Verifikasi Topologi Riil** | Menjalankan `ros2 topic list`, `ros2 topic info -v`, dan `rqt_graph` saat robot BRONE aktif bersama tim. | **AGENDA LAPANGAN** |
-| 4 | **Kontrol Sesi Pengujian** | Mengembangkan fitur *Controlled Benchmark Session* (Tombol Start/Stop + Timer Otomatis 60s) pada branch `feat/session-control-timer`. | **AGENDA FITUR BARU** |
-| 5 | **Pengujian Terintegrasi** | Menguji transmisi topik nyata lintas mesin saat robot menjalankan misi penuh untuk memvalidasi interaksi multivariabel. | **AGENDA PENGUJIAN** |
+| 3 | **Kontrol Sesi Pengujian** | Mengembangkan fitur *Controlled Benchmark Session* (Tombol Start/Stop + Timer Otomatis 60s/300s) lengkap dengan countdown dan progress bar. | **SELESAI** |
+| 4 | **Metrik Jitter Kontinu** | Menghitung standar deviasi latensi ($\sigma_\tau$) kontinu per detik dan menampilkan grafik time-series Jitter. | **SELESAI** |
+| 5 | **Verifikasi Topologi Riil** | Menjalankan `ros2 topic list`, `ros2 topic info -v`, dan `rqt_graph` saat robot BRONE aktif bersama tim. | **AGENDA LAPANGAN** |
+| 6 | **Pengujian Terintegrasi** | Menguji transmisi topik nyata lintas mesin saat robot menjalankan misi penuh untuk memvalidasi interaksi multivariabel. | **SELESAI (67k+ Paket)** |
 
 ---
 

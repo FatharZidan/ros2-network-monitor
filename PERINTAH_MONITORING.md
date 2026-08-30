@@ -146,6 +146,7 @@ python3 network_monitor_gui.py --ros-args -p topology:=jetson2nuc
 **Terminal 1 NUC (Publisher):**
 ```bash
 ssh brone-ub@10.101.143.111
+
 source ~/.bashrc
 source /opt/ros/jazzy/setup.bash
 cd ~/ros2_network_monitor
@@ -254,31 +255,49 @@ Jika file CSV dibuka di Excel dan seluruh data berada dalam Kolom A:
 
 ---
 
-## ⏰ Solusi Jika Muncul Latensi Minus (Clock Skew)
+## ⏰ Solusi & Mitigasi Lengkap Jika Terjadi Clock Skew (Latensi Minus)
 
 ### Kapan Perlu Sinkronisasi Jam?
-- **Uji Lokal Standalone (`jetson2jetson` / `nuc2nuc` / Omniwheel):** ❌ **TIDAK PERLU**. Menggunakan 1 hardware CPU yang sama (`perf_counter_ns`), clock homogen dan bebas dari clock skew.
-- **Uji Lintas Mesin (`jetson2nuc` / `nuc2jetson`):** ✅ **DIBUTUHKAN** jika jam sistem NUC dan Jetson memiliki selisih waktu (offset).
+- **Uji Lokal Standalone (`jetson2jetson` / `nuc2nuc`):** ❌ **TIDAK PERLU**. Menggunakan 1 hardware CPU yang sama (`perf_counter_ns`), clock homogen dan bebas dari clock skew.
+- **Uji Lintas Mesin (`jetson2nuc` / `nuc2jetson`):** ✅ **DIBUTUHKAN** jika kristal jam hardware NUC dan Jetson memiliki selisih waktu (offset).
 
-### 🛠️ Cara Sinkronisasi Presisi Tinggi (Aman untuk ROS 2 / TF2)
-Jika di monitor muncul nilai latensi negatif (misal `-3.2 ms`):
+---
+
+### 🛠️ METODE 1: Sinkronisasi Presisi Tinggi via `chrony` (Rekomendasi Utama)
+Jika di monitor muncul nilai latensi negatif (misal `-3.2 ms`) atau banner kuning Clock Skew aktif:
 
 1. **Di Terminal NUC (Master Clock):**
    ```bash
    sudo apt install -y chrony
-   # Sinkronkan NUC ke NTP internet (jika ada) atau jadikan master lokal:
-   sudo chronyd -q 'server pool.ntp.org iburst'
+   sudo systemctl restart chrony
    ```
 
 2. **Di Terminal JETSON (Client Clock):**
    ```bash
    sudo apt install -y chrony
-   # Sinkronkan langsung ke IP NUC:
+   # Sinkronkan langsung ke IP NUC (bisa lewat IP ZeroTier atau IP LAN Kabel):
    sudo chronyd -q 'server 10.101.143.111 iburst'
+   # Atau via IP LAN: sudo chronyd -q 'server 192.168.100.1 iburst'
    ```
 
-> 🛡️ **Mengapa Aman untuk ROS 2?**
-> `chrony` menggunakan metode **Clock Slewing** (menyesuaikan kecepatan kristal mikrodetik secara halus tanpa lompatan waktu kasar seperti `ntpdate`), sehingga **Transform Tree (TF2), Odometri, dan State Machine Robotis OP3 tetap 100% stabil dan tidak akan mengalami error waktu.**
+3. **Verifikasi Keberhasilan di Jetson:**
+   ```bash
+   chronyc tracking
+   ```
+   👉 *Lihat baris `System time`: Jika tertulis `0.0000xxxxx seconds slow/fast` (selisih < 0.1 ms), sinkronisasi berhasil 100% dan Clock Skew hilang!*
+
+---
+
+### ⚡ METODE 2: Quick-Fix 1 Detik (Jika Tanpa Koneksi Internet / Offline Lapangan)
+Jika di lapangan lomba robot tidak ada koneksi internet untuk install paket baru, cukup ketik **1 baris perintah ini di terminal JETSON**:
+
+```bash
+sudo date -s "$(ssh brone-ub@10.101.143.111 'date -u -Iseconds')"
+```
+*(Perintah ini menyalin detik dan menit waktu sistem NUC secara instan ke Jetson via SSH).*
+
+> 🛡️ **Mengapa Aman untuk ROS 2 & Robotis OP3?**  
+> `chrony` menggunakan metode **Clock Slewing** (menyesuaikan kecepatan kristal mikrodetik secara halus tanpa lompatan waktu kasar), sehingga **Transform Tree (TF2), Odometri, dan State Machine Robotis OP3 tetap 100% stabil dan tidak akan mengalami error waktu.**
 
 ---
 
@@ -298,3 +317,17 @@ Jika di terminal NUC (Jazzy) muncul serangkaian pesan:
 `[WARN] [rmw_cyclonedds_cpp]: Failed to parse type hash for topic ... from USER_DATA '(null)'`
 - **Penyebab:** ROS 2 Jazzy (Ubuntu 24.04) memiliki fitur *Type Hash* (sidik jari tipe pesan). ROS 2 Humble (Ubuntu 22.04) belum memiliki fitur tersebut, sehingga nilainya kosong (`null`).
 - **Status:** **100% AMAN (*Benign Warning*)**. Peringatan ini murni informasi kompatibilitas versi. Seluruh isi data biner, nomor sequence, dan kalkulasi latensi tetap terkirim dan terbaca 100% sempurna tanpa *corruption*.
+
+---
+
+## 🛡️ Batasan Sistem & Disclaimer Ruang Lingkup Pengukuran
+
+Pahami batasan ini agar tidak terjadi salah interpretasi terhadap angka yang tertera di dashboard:
+
+| Jalur / Komponen | Apakah Diukur oleh Monitor? | Penjelasan Teknis |
+|---|:---:|---|
+| 🌐 **Kabel LAN RJ45 (NUC ↔ Jetson)** | ✅ **DIUKUR (In-Scope)** | Latensi murni $\sim 1.2\text{ ms}$ mencakup serialisasi struct biner, middleware CycloneDDS, UDP transport, dan perambatan sinyal kabel fisik LAN robot. |
+| 💻 **Komunikasi Loopback (Intra-Host)** | ✅ **DIUKUR (In-Scope)** | Latensi internal $\sim 0.7\text{ -- }0.8\text{ ms}$ di dalam memori/loopback prosesor NUC atau Jetson. |
+| 📶 **SSH / Wi-Fi / ZeroTier Laptop** | ❌ **TIDAK DIUKUR (Out-of-Scope)** | Sinyal Wi-Fi laptop ke robot memiliki latensi acak ($\sim 20\text{ -- }100\text{ ms}$). Ini adalah jalur *telemetri pengamat*, bukan kontrol on-board robot. |
+| 🔌 **Serial Bus Dynamixel / OpenCR / U2D2** | ❌ **TIDAK DIUKUR (Out-of-Scope)** | Waktu transmisi fisik USB/UART ke mikrokontroler OpenCR/servo ($\sim 1\text{ -- }3\text{ ms}$) adalah *hardware serial bus*, bukan lapisan DDS. |
+| 👁️ **Waktu Inferensi AI & Shutter Kamera** | ❌ **TIDAK DIUKUR (Out-of-Scope)** | Waktu eksposur sensor optik kamera ($\sim 20\text{ ms}$) dan kalkulasi tensor GPU YOLOv11 ($\sim 30\text{ ms}$) adalah *computation latency*, bukan *network transport latency*. |

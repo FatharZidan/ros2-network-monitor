@@ -933,9 +933,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.send_response(503)
                 self.end_headers()
                 
-        elif self.path == '/':
-            self.path = '/dashboard.html'
-            super().do_GET()
+        elif self.path in ('/', '/dashboard.html', '/index.html'):
+            html_file = Path(__file__).resolve().parent / 'dashboard.html'
+            if html_file.exists():
+                content = html_file.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                self.send_header('Pragma', 'no-cache')
+                self.send_header('Expires', '0')
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(404)
+                self.end_headers()
         else:
             super().do_GET()
 
