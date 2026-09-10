@@ -502,6 +502,10 @@
         .card-total::before { background: var(--accent-total); }
         .metric-card.p95::before, .metric-card.p99::before { background: var(--accent-p95); }
         .metric-card.miss-rate::before { background: var(--accent-miss); }
+        .card-cpu-temp::before { background: #ea580c; }
+        .card-gpu-temp::before { background: #dc2626; }
+        .card-cpu-pct::before { background: #2563eb; }
+        .card-ram-pct::before { background: #7c3aed; }
 
         .metric-label {
             font-size: 11px;
@@ -878,6 +882,35 @@
             <div class="metric-label">Miss Rate (Drop)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valMissRate">0.00</span>
+                <span class="metric-unit">%</span>
+            </div>
+        </div>
+
+        <div class="metric-card card-cpu-temp">
+            <div class="metric-label">Suhu CPU</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valCpuTemp">0.0</span>
+                <span class="metric-unit">°C</span>
+            </div>
+        </div>
+        <div class="metric-card card-gpu-temp">
+            <div class="metric-label">Suhu GPU / SoC</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valGpuTemp">0.0</span>
+                <span class="metric-unit">°C</span>
+            </div>
+        </div>
+        <div class="metric-card card-cpu-pct">
+            <div class="metric-label">CPU Usage</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valCpuPct">0.0</span>
+                <span class="metric-unit">%</span>
+            </div>
+        </div>
+        <div class="metric-card card-ram-pct">
+            <div class="metric-label">RAM Usage</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valRamPct">0.0</span>
                 <span class="metric-unit">%</span>
             </div>
         </div>
@@ -1402,6 +1435,10 @@
             valP95.textContent = (c.p95_lat || 0).toFixed(2);
             valP99.textContent = (c.p99_lat || 0).toFixed(2);
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
+            valCpuTemp.textContent = (c.cpu_temp_c || 0).toFixed(1);
+            valGpuTemp.textContent = (c.gpu_temp_c || 0).toFixed(1);
+            valCpuPct.textContent = (c.cpu_pct || 0).toFixed(1);
+            valRamPct.textContent = (c.ram_pct || 0).toFixed(1);
 
             // Clock Skew Warning
             if (c.clock_skew || c.negative_count > 0) {
