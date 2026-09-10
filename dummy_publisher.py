@@ -24,6 +24,101 @@ def get_timestamp_ns(topology: str):
     else:
         raise ValueError(f"Topology tidak valid: {topology}. Pilihan: nuc2nuc, jetson2jetson, nuc2jetson, jetson2nuc")
 
+_last_cpu_idle = 0.0
+_last_cpu_total = 0.0
+
+
+def get_system_health() -> dict:
+    """Read Linux system thermal, CPU, and RAM metrics without external dependencies."""
+    global _last_cpu_idle, _last_cpu_total
+    
+    cpu_temp = 0.0
+    gpu_temp = 0.0
+    cpu_pct = 0.0
+    ram_used_mb = 0.0
+    ram_total_mb = 0.0
+    ram_pct = 0.0
+    
+    try:
+        thermal_dir = "/sys/class/thermal"
+        if os.path.exists(thermal_dir):
+            for zone in sorted(os.listdir(thermal_dir)):
+                if zone.startswith("thermal_zone"):
+                    type_file = os.path.join(thermal_dir, zone, "type")
+                    temp_file = os.path.join(thermal_dir, zone, "temp")
+                    if os.path.exists(temp_file):
+                        with open(temp_file, "r") as f:
+                            raw_val = f.read().strip()
+                            if raw_val:
+                                t_val = float(raw_val) / 1000.0
+                            else:
+                                continue
+                        
+                        if not (0.0 <= t_val <= 125.0):
+                            continue
+
+                        t_type = ""
+                        if os.path.exists(type_file):
+                            with open(type_file, "r") as tf:
+                                t_type = tf.read().strip().lower()
+                        
+                        if "gpu" in t_type:
+                            gpu_temp = max(gpu_temp, t_val)
+                        elif any(k in t_type for k in ["cpu", "x86", "soc", "core"]):
+                            cpu_temp = max(cpu_temp, t_val)
+                        elif cpu_temp == 0.0:
+                            cpu_temp = t_val
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists("/proc/stat"):
+            with open("/proc/stat", "r") as f:
+                first_line = f.readline()
+            fields = [float(x) for x in first_line.split()[1:]]
+            if len(fields) >= 5:
+                idle = fields[3] + fields[4]
+                total = sum(fields)
+                
+                idle_delta = idle - _last_cpu_idle
+                total_delta = total - _last_cpu_total
+                _last_cpu_idle = idle
+                _last_cpu_total = total
+                
+                if total_delta > 0:
+                    cpu_pct = round((1.0 - idle_delta / total_delta) * 100.0, 1)
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists("/proc/meminfo"):
+            mem_info = {}
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        val_str = parts[1].strip().split()[0]
+                        mem_info[key] = float(val_str)
+            if "MemTotal" in mem_info and "MemAvailable" in mem_info:
+                total_kb = mem_info["MemTotal"]
+                avail_kb = mem_info["MemAvailable"]
+                if total_kb > 0:
+                    used_kb = total_kb - avail_kb
+                    ram_total_mb = round(total_kb / 1024.0, 1)
+                    ram_used_mb = round(used_kb / 1024.0, 1)
+                    ram_pct = round((used_kb / total_kb) * 100.0, 1)
+    except Exception:
+        pass
+
+    return {
+        "cpu_temp_c": round(cpu_temp, 1),
+        "gpu_temp_c": round(gpu_temp, 1),
+        "cpu_pct": cpu_pct,
+        "ram_pct": ram_pct
+    }
+
+
 class DummyPublisher(Node):
     def __init__(self, args, stop_event):
         super().__init__('dummy_publisher')
@@ -32,6 +127,10 @@ class DummyPublisher(Node):
         self.seq = 0
         
         self.ts_func = get_timestamp_ns(self.args.topology)
+        
+        # Cache health to update every 1 second (zero overhead during high-frequency publish)
+        self._cached_health = get_system_health()
+        self.create_timer(1.0, self._update_health_cache)
         
         qos_map = {
             'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
@@ -63,6 +162,10 @@ class DummyPublisher(Node):
         else:
             self.get_logger().info("[GPU] CUDA tidak tersedia")
             
+    def _update_health_cache(self):
+        """Update system health cache every 1s."""
+        self._cached_health = get_system_health()
+
     def cuda_workload(self):
         import numpy as np
         try:
@@ -94,8 +197,15 @@ class DummyPublisher(Node):
             
         ts_ns = self.ts_func()
         
-        padding_size = max(0, self.args.payload - 16)
-        header = struct.pack('!Qq', self.seq, ts_ns)
+        # 24-byte Header: seq (Q, 8b), ts_ns (q, 8b), cpu_temp*10 (H, 2b), gpu_temp*10 (H, 2b), cpu_pct*10 (H, 2b), ram_pct*10 (H, 2b)
+        h = self._cached_health
+        c_temp_u16 = min(65535, max(0, int(h['cpu_temp_c'] * 10)))
+        g_temp_u16 = min(65535, max(0, int(h['gpu_temp_c'] * 10)))
+        c_pct_u16 = min(65535, max(0, int(h['cpu_pct'] * 10)))
+        r_pct_u16 = min(65535, max(0, int(h['ram_pct'] * 10)))
+        
+        header = struct.pack('!QqHHHH', self.seq, ts_ns, c_temp_u16, g_temp_u16, c_pct_u16, r_pct_u16)
+        padding_size = max(0, self.args.payload - len(header))
         payload_bytes = header + os.urandom(padding_size)
         
         msg = UInt8MultiArray()
@@ -104,7 +214,7 @@ class DummyPublisher(Node):
         self.publisher_.publish(msg)
         
         if self.seq % self.args.freq == 0:
-            self.get_logger().info(f"Published seq: {self.seq}, payload: {self.args.payload} bytes")
+            self.get_logger().info(f"Published seq: {self.seq}, payload: {len(payload_bytes)} bytes (Pub Suhu: {h['cpu_temp_c']}°C)")
             
         self.seq += 1
 

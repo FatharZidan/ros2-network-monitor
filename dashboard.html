@@ -887,30 +887,31 @@
         </div>
 
         <div class="metric-card card-cpu-temp">
-            <div class="metric-label">Suhu CPU</div>
+            <div class="metric-label">📤 Suhu CPU (Publisher / Pengirim)</div>
             <div class="metric-value-container">
-                <span class="metric-value" id="valCpuTemp">0.0</span>
-                <span class="metric-unit">°C</span>
-            </div>
-        </div>
-        <div class="metric-card card-gpu-temp">
-            <div class="metric-label">Suhu GPU / SoC</div>
-            <div class="metric-value-container">
-                <span class="metric-value" id="valGpuTemp">0.0</span>
+                <span class="metric-value" id="valPubCpuTemp">0.0</span>
                 <span class="metric-unit">°C</span>
             </div>
         </div>
         <div class="metric-card card-cpu-pct">
-            <div class="metric-label">CPU Usage</div>
+            <div class="metric-label">📤 CPU Usage (Publisher)</div>
             <div class="metric-value-container">
-                <span class="metric-value" id="valCpuPct">0.0</span>
+                <span class="metric-value" id="valPubCpuPct">0.0</span>
                 <span class="metric-unit">%</span>
             </div>
         </div>
-        <div class="metric-card card-ram-pct">
-            <div class="metric-label">RAM Usage</div>
+
+        <div class="metric-card card-gpu-temp">
+            <div class="metric-label">📥 Suhu CPU (Subscriber / Penerima)</div>
             <div class="metric-value-container">
-                <span class="metric-value" id="valRamPct">0.0</span>
+                <span class="metric-value" id="valSubCpuTemp">0.0</span>
+                <span class="metric-unit">°C</span>
+            </div>
+        </div>
+        <div class="metric-card card-ram-pct">
+            <div class="metric-label">📥 CPU Usage (Subscriber)</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valSubCpuPct">0.0</span>
                 <span class="metric-unit">%</span>
             </div>
         </div>
@@ -1435,10 +1436,10 @@
             valP95.textContent = (c.p95_lat || 0).toFixed(2);
             valP99.textContent = (c.p99_lat || 0).toFixed(2);
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
-            valCpuTemp.textContent = (c.cpu_temp_c || 0).toFixed(1);
-            valGpuTemp.textContent = (c.gpu_temp_c || 0).toFixed(1);
-            valCpuPct.textContent = (c.cpu_pct || 0).toFixed(1);
-            valRamPct.textContent = (c.ram_pct || 0).toFixed(1);
+            valPubCpuTemp.textContent = (c.pub_cpu_temp_c || 0).toFixed(1);
+            valPubCpuPct.textContent = (c.pub_cpu_pct || 0).toFixed(1);
+            valSubCpuTemp.textContent = (c.sub_cpu_temp_c || 0).toFixed(1);
+            valSubCpuPct.textContent = (c.sub_cpu_pct || 0).toFixed(1);
 
             // Clock Skew Warning
             if (c.clock_skew || c.negative_count > 0) {

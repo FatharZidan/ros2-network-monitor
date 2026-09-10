@@ -317,13 +317,41 @@ class MonitorNode(Node):
                 'miss_rate_percent': 0.0,
                 'last_latency': 0.0,
                 'total_gaps': 0,
-                'cpu_temp_c': sys_health_reset['cpu_temp_c'],
-                'gpu_temp_c': sys_health_reset['gpu_temp_c'],
-                'cpu_pct': sys_health_reset['cpu_pct'],
-                'ram_used_mb': sys_health_reset['ram_used_mb'],
-                'ram_pct': sys_health_reset['ram_pct'],
-            }
-            self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
+        self._last_pub_cpu_temp = 0.0
+        self._last_pub_gpu_temp = 0.0
+        self._last_pub_cpu_pct = 0.0
+        self._last_pub_ram_pct = 0.0
+        
+        sys_health_init = get_system_health()
+        self._current_stats = {
+            'hz': 0.0,
+            'count': 0,
+            'avg_lat': 0.0,
+            'min_lat': 0.0,
+            'max_lat': 0.0,
+            'std_lat': 0.0,
+            'total': 0,
+            'clock_skew': False,
+            'negative_count': 0,
+            'elapsed': 0.0,
+            'timestamp': time.time(),
+            'cuda_active': False,
+            'p95_lat': 0.0,
+            'p99_lat': 0.0,
+            'miss_rate_percent': 0.0,
+            'last_latency': 0.0,
+            'total_gaps': 0,
+            'pub_cpu_temp_c': 0.0,
+            'pub_gpu_temp_c': 0.0,
+            'pub_cpu_pct': 0.0,
+            'pub_ram_pct': 0.0,
+            'sub_cpu_temp_c': sys_health_init['cpu_temp_c'],
+            'sub_gpu_temp_c': sys_health_init['gpu_temp_c'],
+            'sub_cpu_pct': sys_health_init['cpu_pct'],
+            'sub_ram_used_mb': sys_health_init['ram_used_mb'],
+            'sub_ram_pct': sys_health_init['ram_pct'],
+        }
+        self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
     def _listener_callback(self, msg):
         raw = bytes(msg.data)
@@ -339,7 +367,15 @@ class MonitorNode(Node):
         if not self._is_recording:
             return
             
-        seq, ts_ns = struct.unpack('!Qq', raw[:16])
+        if len(raw) >= 24:
+            seq, ts_ns, c_t, g_t, c_p, r_p = struct.unpack('!QqHHHH', raw[:24])
+            self._last_pub_cpu_temp = c_t / 10.0
+            self._last_pub_gpu_temp = g_t / 10.0
+            self._last_pub_cpu_pct = c_p / 10.0
+            self._last_pub_ram_pct = r_p / 10.0
+        else:
+            seq, ts_ns = struct.unpack('!Qq', raw[:16])
+
         recv_ns = self._ts_func()
         latency_ms = (recv_ns - ts_ns) / 1_000_000.0
         
@@ -431,11 +467,16 @@ class MonitorNode(Node):
             'miss_rate_percent': round(miss_rate, 2),
             'last_latency': round(self._last_latency, 3),
             'total_gaps': self._total_gaps,
-            'cpu_temp_c': sys_health['cpu_temp_c'],
-            'gpu_temp_c': sys_health['gpu_temp_c'],
-            'cpu_pct': sys_health['cpu_pct'],
-            'ram_used_mb': sys_health['ram_used_mb'],
-            'ram_pct': sys_health['ram_pct'],
+            # Dual Telemetry
+            'pub_cpu_temp_c': self._last_pub_cpu_temp,
+            'pub_gpu_temp_c': self._last_pub_gpu_temp,
+            'pub_cpu_pct': self._last_pub_cpu_pct,
+            'pub_ram_pct': self._last_pub_ram_pct,
+            'sub_cpu_temp_c': sys_health['cpu_temp_c'],
+            'sub_gpu_temp_c': sys_health['gpu_temp_c'],
+            'sub_cpu_pct': sys_health['cpu_pct'],
+            'sub_ram_used_mb': sys_health['ram_used_mb'],
+            'sub_ram_pct': sys_health['ram_pct'],
         }
         
         with self._lock:
@@ -444,7 +485,7 @@ class MonitorNode(Node):
             
         self.get_logger().info(
             f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
-            f"P95: {stats['p95_lat']}ms | Suhu: {stats['cpu_temp_c']}°C | CPU: {stats['cpu_pct']}% | RAM: {stats['ram_pct']}%"
+            f"Pub Suhu: {stats['pub_cpu_temp_c']}°C ({stats['pub_cpu_pct']}%) | Sub Suhu: {stats['sub_cpu_temp_c']}°C ({stats['sub_cpu_pct']}%)"
         )
         
         self._latencies.clear()
