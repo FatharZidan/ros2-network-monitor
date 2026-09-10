@@ -9,6 +9,7 @@ import time
 import json
 import statistics
 import threading
+import os
 from datetime import datetime
 from typing import List, Dict, Any
 from collections import deque
@@ -43,6 +44,107 @@ def calculate_percentile(data: list, p: float) -> float:
     upper = min(lower + 1, n - 1)
     fraction = index - lower
     return sorted_data[lower] + fraction * (sorted_data[upper] - sorted_data[lower])
+
+
+_last_cpu_idle = 0.0
+_last_cpu_total = 0.0
+
+
+def get_system_health() -> dict:
+    """Read Linux system thermal, CPU, and RAM metrics without external dependencies."""
+    global _last_cpu_idle, _last_cpu_total
+    
+    cpu_temp = 0.0
+    gpu_temp = 0.0
+    cpu_pct = 0.0
+    ram_used_mb = 0.0
+    ram_total_mb = 0.0
+    ram_pct = 0.0
+    
+    # 1. Thermal Reading (/sys/class/thermal/thermal_zone*/temp)
+    try:
+        thermal_dir = "/sys/class/thermal"
+        if os.path.exists(thermal_dir):
+            for zone in sorted(os.listdir(thermal_dir)):
+                if zone.startswith("thermal_zone"):
+                    type_file = os.path.join(thermal_dir, zone, "type")
+                    temp_file = os.path.join(thermal_dir, zone, "temp")
+                    if os.path.exists(temp_file):
+                        with open(temp_file, "r") as f:
+                            raw_val = f.read().strip()
+                            if raw_val:
+                                t_val = float(raw_val) / 1000.0
+                            else:
+                                continue
+                        
+                        # Sanity check thermal range (0C to 125C)
+                        if not (0.0 <= t_val <= 125.0):
+                            continue
+
+                        t_type = ""
+                        if os.path.exists(type_file):
+                            with open(type_file, "r") as tf:
+                                t_type = tf.read().strip().lower()
+                        
+                        if "gpu" in t_type:
+                            gpu_temp = max(gpu_temp, t_val)
+                        elif any(k in t_type for k in ["cpu", "x86", "soc", "core"]):
+                            cpu_temp = max(cpu_temp, t_val)
+                        elif cpu_temp == 0.0:
+                            cpu_temp = t_val
+    except Exception:
+        pass
+
+    # 2. CPU Usage Calculation (/proc/stat)
+    try:
+        if os.path.exists("/proc/stat"):
+            with open("/proc/stat", "r") as f:
+                first_line = f.readline()
+            fields = [float(x) for x in first_line.split()[1:]]
+            if len(fields) >= 5:
+                idle = fields[3] + fields[4]
+                total = sum(fields)
+                
+                idle_delta = idle - _last_cpu_idle
+                total_delta = total - _last_cpu_total
+                _last_cpu_idle = idle
+                _last_cpu_total = total
+                
+                if total_delta > 0:
+                    cpu_pct = round((1.0 - idle_delta / total_delta) * 100.0, 1)
+    except Exception:
+        pass
+
+    # 3. RAM Usage Calculation (/proc/meminfo)
+    try:
+        if os.path.exists("/proc/meminfo"):
+            mem_info = {}
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        val_str = parts[1].strip().split()[0]
+                        mem_info[key] = float(val_str)
+            if "MemTotal" in mem_info and "MemAvailable" in mem_info:
+                total_kb = mem_info["MemTotal"]
+                avail_kb = mem_info["MemAvailable"]
+                if total_kb > 0:
+                    used_kb = total_kb - avail_kb
+                    ram_total_mb = round(total_kb / 1024.0, 1)
+                    ram_used_mb = round(used_kb / 1024.0, 1)
+                    ram_pct = round((used_kb / total_kb) * 100.0, 1)
+    except Exception:
+        pass
+
+    return {
+        "cpu_temp_c": round(cpu_temp, 1),
+        "gpu_temp_c": round(gpu_temp, 1),
+        "cpu_pct": cpu_pct,
+        "ram_used_mb": ram_used_mb,
+        "ram_total_mb": ram_total_mb,
+        "ram_pct": ram_pct
+    }
 
 
 class MonitorNode(Node):
@@ -89,6 +191,7 @@ class MonitorNode(Node):
         self._live_feed_connected = False
         self._events = []
         
+        sys_health_init = get_system_health()
         self._current_stats = {
             'hz': 0.0,
             'count': 0,
@@ -107,6 +210,11 @@ class MonitorNode(Node):
             'miss_rate_percent': 0.0,
             'last_latency': 0.0,
             'total_gaps': 0,
+            'cpu_temp_c': sys_health_init['cpu_temp_c'],
+            'gpu_temp_c': sys_health_init['gpu_temp_c'],
+            'cpu_pct': sys_health_init['cpu_pct'],
+            'ram_used_mb': sys_health_init['ram_used_mb'],
+            'ram_pct': sys_health_init['ram_pct'],
         }
         
         self._history = deque(maxlen=3600)  # Support up to 1 hour test
@@ -190,6 +298,7 @@ class MonitorNode(Node):
             self._is_recording = False
             self._session_state = 'IDLE'
             self._session_elapsed = 0
+            sys_health_reset = get_system_health()
             self._current_stats = {
                 'hz': 0.0,
                 'count': 0,
@@ -208,6 +317,11 @@ class MonitorNode(Node):
                 'miss_rate_percent': 0.0,
                 'last_latency': 0.0,
                 'total_gaps': 0,
+                'cpu_temp_c': sys_health_reset['cpu_temp_c'],
+                'gpu_temp_c': sys_health_reset['gpu_temp_c'],
+                'cpu_pct': sys_health_reset['cpu_pct'],
+                'ram_used_mb': sys_health_reset['ram_used_mb'],
+                'ram_pct': sys_health_reset['ram_pct'],
             }
             self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
@@ -297,6 +411,8 @@ class MonitorNode(Node):
         else:
             miss_rate = 0.0
             
+        sys_health = get_system_health()
+        
         stats = {
             'hz': round(hz, 2),
             'count': count,
@@ -315,6 +431,11 @@ class MonitorNode(Node):
             'miss_rate_percent': round(miss_rate, 2),
             'last_latency': round(self._last_latency, 3),
             'total_gaps': self._total_gaps,
+            'cpu_temp_c': sys_health['cpu_temp_c'],
+            'gpu_temp_c': sys_health['gpu_temp_c'],
+            'cpu_pct': sys_health['cpu_pct'],
+            'ram_used_mb': sys_health['ram_used_mb'],
+            'ram_pct': sys_health['ram_pct'],
         }
         
         with self._lock:
@@ -323,8 +444,7 @@ class MonitorNode(Node):
             
         self.get_logger().info(
             f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
-            f"P95: {stats['p95_lat']}ms | Gaps: {stats['total_gaps']} | "
-            f"Miss: {stats['miss_rate_percent']}%"
+            f"P95: {stats['p95_lat']}ms | Suhu: {stats['cpu_temp_c']}°C | CPU: {stats['cpu_pct']}% | RAM: {stats['ram_pct']}%"
         )
         
         self._latencies.clear()
@@ -376,15 +496,26 @@ class MonitorNode(Node):
                 if hz_list:
                     freq_hz = round(sum(hz_list) / len(hz_list), 1)
             
+            cpu_temps = [h.get('cpu_temp_c', 0) for h in self._history if h.get('cpu_temp_c', 0) > 0]
+            peak_cpu_temp = max(cpu_temps) if cpu_temps else 0.0
+            gpu_temps = [h.get('gpu_temp_c', 0) for h in self._history if h.get('gpu_temp_c', 0) > 0]
+            peak_gpu_temp = max(gpu_temps) if gpu_temps else 0.0
+            cpu_usages = [h.get('cpu_pct', 0) for h in self._history]
+            peak_cpu_pct = max(cpu_usages) if cpu_usages else 0.0
+            ram_pcts = [h.get('ram_pct', 0) for h in self._history]
+            peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
+
             header = [
                 "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
-                "ros2_distro_note", "total_samples", "total_expected", "total_gaps",
-                "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms"
+                "total_samples", "total_expected", "total_gaps",
+                "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms",
+                "peak_cpu_temp_c", "peak_gpu_temp_c", "peak_cpu_pct", "peak_ram_pct"
             ]
             row = [
                 iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
-                "NUC=Jazzy_Jetson=Humble", total_samples, total_expected, total_gaps,
-                round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3)
+                total_samples, total_expected, total_gaps,
+                round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
+                peak_cpu_temp, peak_gpu_temp, peak_cpu_pct, peak_ram_pct
             ]
             
             filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
@@ -397,13 +528,18 @@ class MonitorNode(Node):
             
             if self._history:
                 output.write("\n# Detailed Window History (1s Interval)\n")
-                hist_header = ["timestamp_iso", "hz", "samples_in_window", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms", "miss_rate_pct", "total_accumulated"]
+                hist_header = [
+                    "timestamp_iso", "hz", "samples_in_window", "avg_lat_ms", "min_lat_ms", "max_lat_ms",
+                    "p95_lat_ms", "p99_lat_ms", "miss_rate_pct", "total_accumulated",
+                    "cpu_temp_c", "gpu_temp_c", "cpu_pct", "ram_used_mb", "ram_pct"
+                ]
                 writer.writerow(hist_header)
                 for h in self._history:
                     h_ts = datetime.fromtimestamp(h['timestamp']).isoformat()
                     writer.writerow([
                         h_ts, h.get('hz', 0), h.get('count', 0), h.get('avg_lat', 0), h.get('min_lat', 0),
-                        h.get('max_lat', 0), h.get('p95_lat', 0), h.get('p99_lat', 0), h.get('miss_rate_percent', 0), h.get('total', 0)
+                        h.get('max_lat', 0), h.get('p95_lat', 0), h.get('p99_lat', 0), h.get('miss_rate_percent', 0), h.get('total', 0),
+                        h.get('cpu_temp_c', 0), h.get('gpu_temp_c', 0), h.get('cpu_pct', 0), h.get('ram_used_mb', 0), h.get('ram_pct', 0)
                     ])
                     
             return filename, output.getvalue()
@@ -441,6 +577,15 @@ class MonitorNode(Node):
             history_list = list(self._history)
             events_list = list(self._events)
             
+            cpu_temps = [h.get('cpu_temp_c', 0) for h in history_list if h.get('cpu_temp_c', 0) > 0]
+            peak_cpu_temp = max(cpu_temps) if cpu_temps else 0.0
+            gpu_temps = [h.get('gpu_temp_c', 0) for h in history_list if h.get('gpu_temp_c', 0) > 0]
+            peak_gpu_temp = max(gpu_temps) if gpu_temps else 0.0
+            cpu_usages = [h.get('cpu_pct', 0) for h in history_list]
+            peak_cpu_pct = max(cpu_usages) if cpu_usages else 0.0
+            ram_pcts = [h.get('ram_pct', 0) for h in history_list]
+            peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
+
             report_data = {
                 'filename': f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv",
                 'metadata': {
@@ -460,6 +605,10 @@ class MonitorNode(Node):
                     'total_samples': total_samples,
                     'total_gaps': total_gaps,
                     'duration_sec': len(history_list),
+                    'peak_cpu_temp_c': peak_cpu_temp,
+                    'peak_gpu_temp_c': peak_gpu_temp,
+                    'peak_cpu_pct': peak_cpu_pct,
+                    'peak_ram_pct': peak_ram_pct,
                 },
                 'history': history_list,
                 'events': events_list
