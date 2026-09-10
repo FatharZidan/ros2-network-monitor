@@ -191,6 +191,11 @@ class MonitorNode(Node):
         self._live_feed_connected = False
         self._events = []
         
+        self._last_pub_cpu_temp = 0.0
+        self._last_pub_gpu_temp = 0.0
+        self._last_pub_cpu_pct = 0.0
+        self._last_pub_ram_pct = 0.0
+
         sys_health_init = get_system_health()
         self._current_stats = {
             'hz': 0.0,
@@ -210,11 +215,15 @@ class MonitorNode(Node):
             'miss_rate_percent': 0.0,
             'last_latency': 0.0,
             'total_gaps': 0,
-            'cpu_temp_c': sys_health_init['cpu_temp_c'],
-            'gpu_temp_c': sys_health_init['gpu_temp_c'],
-            'cpu_pct': sys_health_init['cpu_pct'],
-            'ram_used_mb': sys_health_init['ram_used_mb'],
-            'ram_pct': sys_health_init['ram_pct'],
+            'pub_cpu_temp_c': 0.0,
+            'pub_gpu_temp_c': 0.0,
+            'pub_cpu_pct': 0.0,
+            'pub_ram_pct': 0.0,
+            'sub_cpu_temp_c': sys_health_init['cpu_temp_c'],
+            'sub_gpu_temp_c': sys_health_init['gpu_temp_c'],
+            'sub_cpu_pct': sys_health_init['cpu_pct'],
+            'sub_ram_used_mb': sys_health_init['ram_used_mb'],
+            'sub_ram_pct': sys_health_init['ram_pct'],
         }
         
         self._history = deque(maxlen=3600)  # Support up to 1 hour test
@@ -298,6 +307,10 @@ class MonitorNode(Node):
             self._is_recording = False
             self._session_state = 'IDLE'
             self._session_elapsed = 0
+            self._last_pub_cpu_temp = 0.0
+            self._last_pub_gpu_temp = 0.0
+            self._last_pub_cpu_pct = 0.0
+            self._last_pub_ram_pct = 0.0
             sys_health_reset = get_system_health()
             self._current_stats = {
                 'hz': 0.0,
@@ -317,41 +330,17 @@ class MonitorNode(Node):
                 'miss_rate_percent': 0.0,
                 'last_latency': 0.0,
                 'total_gaps': 0,
-        self._last_pub_cpu_temp = 0.0
-        self._last_pub_gpu_temp = 0.0
-        self._last_pub_cpu_pct = 0.0
-        self._last_pub_ram_pct = 0.0
-        
-        sys_health_init = get_system_health()
-        self._current_stats = {
-            'hz': 0.0,
-            'count': 0,
-            'avg_lat': 0.0,
-            'min_lat': 0.0,
-            'max_lat': 0.0,
-            'std_lat': 0.0,
-            'total': 0,
-            'clock_skew': False,
-            'negative_count': 0,
-            'elapsed': 0.0,
-            'timestamp': time.time(),
-            'cuda_active': False,
-            'p95_lat': 0.0,
-            'p99_lat': 0.0,
-            'miss_rate_percent': 0.0,
-            'last_latency': 0.0,
-            'total_gaps': 0,
-            'pub_cpu_temp_c': 0.0,
-            'pub_gpu_temp_c': 0.0,
-            'pub_cpu_pct': 0.0,
-            'pub_ram_pct': 0.0,
-            'sub_cpu_temp_c': sys_health_init['cpu_temp_c'],
-            'sub_gpu_temp_c': sys_health_init['gpu_temp_c'],
-            'sub_cpu_pct': sys_health_init['cpu_pct'],
-            'sub_ram_used_mb': sys_health_init['ram_used_mb'],
-            'sub_ram_pct': sys_health_init['ram_pct'],
-        }
-        self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
+                'pub_cpu_temp_c': 0.0,
+                'pub_gpu_temp_c': 0.0,
+                'pub_cpu_pct': 0.0,
+                'pub_ram_pct': 0.0,
+                'sub_cpu_temp_c': sys_health_reset['cpu_temp_c'],
+                'sub_gpu_temp_c': sys_health_reset['gpu_temp_c'],
+                'sub_cpu_pct': sys_health_reset['cpu_pct'],
+                'sub_ram_used_mb': sys_health_reset['ram_used_mb'],
+                'sub_ram_pct': sys_health_reset['ram_pct'],
+            }
+            self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
     def _listener_callback(self, msg):
         raw = bytes(msg.data)
@@ -537,26 +526,24 @@ class MonitorNode(Node):
                 if hz_list:
                     freq_hz = round(sum(hz_list) / len(hz_list), 1)
             
-            cpu_temps = [h.get('cpu_temp_c', 0) for h in self._history if h.get('cpu_temp_c', 0) > 0]
-            peak_cpu_temp = max(cpu_temps) if cpu_temps else 0.0
-            gpu_temps = [h.get('gpu_temp_c', 0) for h in self._history if h.get('gpu_temp_c', 0) > 0]
-            peak_gpu_temp = max(gpu_temps) if gpu_temps else 0.0
-            cpu_usages = [h.get('cpu_pct', 0) for h in self._history]
-            peak_cpu_pct = max(cpu_usages) if cpu_usages else 0.0
-            ram_pcts = [h.get('ram_pct', 0) for h in self._history]
-            peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
+            pub_cpu_temps = [h.get('pub_cpu_temp_c', 0) for h in self._history if h.get('pub_cpu_temp_c', 0) > 0]
+            peak_pub_cpu_temp = max(pub_cpu_temps) if pub_cpu_temps else 0.0
+            sub_cpu_temps = [h.get('sub_cpu_temp_c', 0) for h in self._history if h.get('sub_cpu_temp_c', 0) > 0]
+            peak_sub_cpu_temp = max(sub_cpu_temps) if sub_cpu_temps else 0.0
+            peak_pub_cpu_pct = max([h.get('pub_cpu_pct', 0) for h in self._history] or [0])
+            peak_sub_cpu_pct = max([h.get('sub_cpu_pct', 0) for h in self._history] or [0])
 
             header = [
                 "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
                 "total_samples", "total_expected", "total_gaps",
                 "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms",
-                "peak_cpu_temp_c", "peak_gpu_temp_c", "peak_cpu_pct", "peak_ram_pct"
+                "peak_pub_cpu_temp_c", "peak_pub_cpu_pct", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
             ]
             row = [
                 iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
                 total_samples, total_expected, total_gaps,
                 round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
-                peak_cpu_temp, peak_gpu_temp, peak_cpu_pct, peak_ram_pct
+                peak_pub_cpu_temp, peak_pub_cpu_pct, peak_sub_cpu_temp, peak_sub_cpu_pct
             ]
             
             filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
@@ -572,7 +559,7 @@ class MonitorNode(Node):
                 hist_header = [
                     "timestamp_iso", "hz", "samples_in_window", "avg_lat_ms", "min_lat_ms", "max_lat_ms",
                     "p95_lat_ms", "p99_lat_ms", "miss_rate_pct", "total_accumulated",
-                    "cpu_temp_c", "gpu_temp_c", "cpu_pct", "ram_used_mb", "ram_pct"
+                    "pub_cpu_temp_c", "pub_cpu_pct", "sub_cpu_temp_c", "sub_cpu_pct", "sub_ram_pct"
                 ]
                 writer.writerow(hist_header)
                 for h in self._history:
@@ -580,7 +567,7 @@ class MonitorNode(Node):
                     writer.writerow([
                         h_ts, h.get('hz', 0), h.get('count', 0), h.get('avg_lat', 0), h.get('min_lat', 0),
                         h.get('max_lat', 0), h.get('p95_lat', 0), h.get('p99_lat', 0), h.get('miss_rate_percent', 0), h.get('total', 0),
-                        h.get('cpu_temp_c', 0), h.get('gpu_temp_c', 0), h.get('cpu_pct', 0), h.get('ram_used_mb', 0), h.get('ram_pct', 0)
+                        h.get('pub_cpu_temp_c', 0), h.get('pub_cpu_pct', 0), h.get('sub_cpu_temp_c', 0), h.get('sub_cpu_pct', 0), h.get('sub_ram_pct', 0)
                     ])
                     
             return filename, output.getvalue()
