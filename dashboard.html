@@ -1665,11 +1665,13 @@
                     }
                 }
 
-                // Quick stats
+                // Quick stats (smooth 1s window reading)
+                const dispDeltaT = (c.avg_lat && c.avg_lat > 0) ? c.avg_lat : (c.current_delta_t_ms || 0);
+                const dispJitter = (c.std_lat && c.std_lat > 0) ? c.std_lat : (c.current_jitter_ms || 0);
                 if (hqTargetHz) hqTargetHz.innerHTML = `${(c.target_hz || 0).toFixed(1)} <small>Hz</small>`;
                 if (hqTargetPeriod) hqTargetPeriod.textContent = `Target Interval: ${(c.target_period_ms || 0).toFixed(2)} ms`;
-                if (hqCurrentDeltaT) hqCurrentDeltaT.innerHTML = `${(c.current_delta_t_ms || c.avg_lat || 0).toFixed(2)} <small>ms</small>`;
-                if (hqJitter) hqJitter.textContent = `Jitter: ±${(c.current_jitter_ms || c.std_lat || 0).toFixed(2)} ms`;
+                if (hqCurrentDeltaT) hqCurrentDeltaT.innerHTML = `${dispDeltaT.toFixed(2)} <small>ms</small>`;
+                if (hqJitter) hqJitter.textContent = `Jitter: ±${dispJitter.toFixed(2)} ms`;
                 if (hqOverrunRate) hqOverrunRate.innerHTML = `${(c.overrun_rate_percent || 0).toFixed(1)} <small>%</small>`;
                 const threshold = c.overrun_threshold_ms || c.target_period_ms || 8.0;
                 if (hqTotalOverruns) hqTotalOverruns.textContent = `${(c.total_overruns || 0).toLocaleString()} paket > ${threshold.toFixed(1)}ms`;
@@ -1693,13 +1695,14 @@
                 if (chartLatency.data.datasets[2]) {
                     chartLatency.data.datasets[2].hidden = false;
                     chartLatency.data.datasets[2].label = `Deadline Budget (${threshold.toFixed(1)} ms)`;
-                    chartLatency.data.datasets[2].data = h.map(() => threshold);
                 }
                 chartLatency.options.scales.y.title.text = 'Jeda Kedatangan Δt (ms)';
 
                 // Chart Skew: in passive mode, single-host receiver timing has no clock skew!
                 chartSkew.data.datasets[0].label = 'Inter-arrival Δt (ms)';
                 chartSkew.options.scales.y.title.text = 'Jeda Δt & Jitter (ms)';
+                chartSkew.options.scales.y.suggestedMin = 0;
+                chartSkew.options.scales.y.beginAtZero = true;
             } else {
                 if (modeBadge) {
                     modeBadge.className = 'mode-badge mode-synthetic';
@@ -1735,6 +1738,8 @@
                 // Chart Skew: synthetic datasets
                 chartSkew.data.datasets[0].label = 'Latensi Terukur (Clock Skew, ms)';
                 chartSkew.options.scales.y.title.text = 'Latensi & Jitter (ms)';
+                chartSkew.options.scales.y.suggestedMin = -2;
+                chartSkew.options.scales.y.beginAtZero = false;
             }
 
             // Metrics Update
@@ -1747,8 +1752,13 @@
             valP95.textContent = (c.p95_lat || 0).toFixed(2);
             valP99.textContent = (c.p99_lat || 0).toFixed(2);
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
-            valPubCpuTemp.textContent = (c.pub_cpu_temp_c || 0).toFixed(1);
-            valPubCpuPct.textContent = (c.pub_cpu_pct || 0).toFixed(1);
+            if (isPassive) {
+                valPubCpuTemp.textContent = (c.pub_cpu_temp_c && c.pub_cpu_temp_c > 0) ? c.pub_cpu_temp_c.toFixed(1) : '-';
+                valPubCpuPct.textContent = (c.pub_cpu_pct && c.pub_cpu_pct > 0) ? c.pub_cpu_pct.toFixed(1) : '-';
+            } else {
+                valPubCpuTemp.textContent = (c.pub_cpu_temp_c || 0).toFixed(1);
+                valPubCpuPct.textContent = (c.pub_cpu_pct || 0).toFixed(1);
+            }
             valSubCpuTemp.textContent = (c.sub_cpu_temp_c || 0).toFixed(1);
             valSubCpuPct.textContent = (c.sub_cpu_pct || 0).toFixed(1);
 
@@ -1770,6 +1780,10 @@
             chartLatency.data.labels = labels;
             chartLatency.data.datasets[0].data = h.map(p => p.avg_lat);
             chartLatency.data.datasets[1].data = h.map(p => p.max_lat);
+            if (isPassive && chartLatency.data.datasets[2]) {
+                const threshold = c.overrun_threshold_ms || c.target_period_ms || 8.0;
+                chartLatency.data.datasets[2].data = h.map(() => threshold);
+            }
             chartLatency.update('none');
 
             chartPercentile.data.labels = labels;
@@ -1787,6 +1801,9 @@
             statusText.textContent = 'Server terputus';
         }
     }
+
+    // Duration selector instant feedback
+    selectDuration.addEventListener('change', update);
 
     // Initial fetch and 1-second interval
     update();

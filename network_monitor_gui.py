@@ -310,11 +310,20 @@ class MonitorNode(Node):
 
     def _bind_passive_subscription(self, topic_name: str, qos_profile: QoSProfile):
         """Bind subscription dynamically for any ROS 2 topic in passive mode."""
+        qos_to_use = qos_profile
+        try:
+            pub_infos = self.get_publishers_info_by_topic(topic_name)
+            if pub_infos:
+                qos_to_use = pub_infos[0].qos_profile
+                self.get_logger().info(f"🔗 Auto-matched QoS profile from active publisher on {topic_name}")
+        except Exception:
+            pass
+
         msg_cls = None
         if self.topic_type_str:
             msg_cls = resolve_msg_type(self.topic_type_str)
             if msg_cls:
-                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_to_use)
                 self._sub_bound = True
                 self.get_logger().info(f"✅ Bound passive subscription with specified type: {self.topic_type_str}")
                 return
@@ -325,7 +334,7 @@ class MonitorNode(Node):
             detected_type = topic_dict[topic_name][0]
             msg_cls = resolve_msg_type(detected_type)
             if msg_cls:
-                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_to_use)
                 self._sub_bound = True
                 self.get_logger().info(f"✅ Auto-detected topic {topic_name} with type: {detected_type}")
                 return
@@ -347,17 +356,24 @@ class MonitorNode(Node):
             'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
             'reliable': QoSReliabilityPolicy.RELIABLE,
         }
-        qos_profile = QoSProfile(
+        qos_to_use = QoSProfile(
             reliability=qos_map.get(qos_str, QoSReliabilityPolicy.BEST_EFFORT),
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10,
         )
+        try:
+            pub_infos = self.get_publishers_info_by_topic(topic_name)
+            if pub_infos:
+                qos_to_use = pub_infos[0].qos_profile
+        except Exception:
+            pass
+
         topic_dict = dict(self.get_topic_names_and_types())
         if topic_name in topic_dict and topic_dict[topic_name]:
             detected_type = topic_dict[topic_name][0]
             msg_cls = resolve_msg_type(detected_type)
             if msg_cls:
-                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_to_use)
                 self._sub_bound = True
                 self.get_logger().info(f"✅ Topic '{topic_name}' discovered! Bound with type: {detected_type}")
                 if hasattr(self, '_probe_timer') and self._probe_timer:
@@ -395,6 +411,19 @@ class MonitorNode(Node):
             self._total_gaps = 0
             self._negative_count = 0
             self._clock_skew_warned = False
+            self._last_pub_cpu_temp = 0.0
+            self._last_pub_gpu_temp = 0.0
+            self._last_pub_cpu_pct = 0.0
+            self._last_pub_ram_pct = 0.0
+            
+            # Reset passive metrics and establish fresh t0
+            self._last_recv_ns = None
+            self._total_overruns = 0
+            self._current_delta_t = 0.0
+            self._current_jitter = 0.0
+            self._health_status = 'HEALTHY'
+            self._health_reasons = []
+
             self._target_duration = int(duration_sec)
             self._session_start_time = time.time()
             self._window_start = self._session_start_time
@@ -633,11 +662,15 @@ class MonitorNode(Node):
                 status = 'DEGRADED' if status != 'CRITICAL' else status
                 reasons.append(f"Jitter terdeteksi: {overrun_rate:.1f}% melampaui deadline {self.target_period_ms:.1f}ms")
                 
-            if self.target_hz > 0 and hz > 0:
-                hz_diff = abs(hz - self.target_hz) / self.target_hz
-                if hz_diff > 0.15:
-                    status = 'DEGRADED' if status != 'CRITICAL' else status
-                    reasons.append(f"Frekuensi drop: {hz:.1f} Hz (Target: {self.target_hz:.1f} Hz)")
+            if self.target_hz > 0:
+                if hz == 0.0:
+                    status = 'CRITICAL'
+                    reasons.append(f"Tidak ada data masuk! (Target: {self.target_hz:.1f} Hz)")
+                else:
+                    hz_diff = abs(hz - self.target_hz) / self.target_hz
+                    if hz_diff > 0.15:
+                        status = 'DEGRADED' if status != 'CRITICAL' else status
+                        reasons.append(f"Frekuensi drop: {hz:.1f} Hz (Target: {self.target_hz:.1f} Hz)")
                     
             self._health_status = status
             self._health_reasons = reasons
@@ -658,7 +691,7 @@ class MonitorNode(Node):
             'target_period_ms': round(self.target_period_ms, 2),
             'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
             'current_delta_t_ms': round(self._current_delta_t, 3),
-            'current_jitter_ms': round(self._current_jitter, 3),
+            'current_jitter_ms': round(std_lat if count > 1 else self._current_jitter, 3),
             'total_overruns': self._total_overruns,
             'overrun_rate_percent': round(overrun_rate, 2),
             'health_status': self._health_status,
@@ -762,16 +795,17 @@ class MonitorNode(Node):
                 topic_name = self.get_parameter('topic_name').value
                 clean_topic = topic_name.strip('/').replace('/', '_')
                 overrun_rate = (self._total_overruns / total_samples * 100.0) if total_samples > 0 else 0.0
+                avg_jitter = statistics.stdev(self._all_latencies) if len(self._all_latencies) > 1 else 0.0
                 header = [
                     "session_timestamp", "mode", "topic_name", "target_hz", "target_period_ms", "overrun_threshold_ms",
                     "total_samples", "total_overruns", "overrun_rate_percent",
-                    "avg_delta_t_ms", "min_delta_t_ms", "max_delta_t_ms", "p95_delta_t_ms", "p99_delta_t_ms",
+                    "avg_delta_t_ms", "jitter_stdev_ms", "min_delta_t_ms", "max_delta_t_ms", "p95_delta_t_ms", "p99_delta_t_ms",
                     "health_status", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
                 ]
                 row = [
                     iso_ts, self.mode, topic_name, self.target_hz, round(self.target_period_ms, 2), round(self.overrun_threshold_ms, 2),
                     total_samples, self._total_overruns, round(overrun_rate, 2),
-                    round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
+                    round(avg_lat, 3), round(avg_jitter, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
                     self._health_status, peak_sub_cpu_temp, peak_sub_cpu_pct
                 ]
                 filename = f"brone_health_{clean_topic}_{int(self.target_hz)}hz_{ts_str}.csv"
@@ -912,6 +946,7 @@ class MonitorNode(Node):
                 'metadata': metadata,
                 'summary': {
                     'avg_lat_ms': round(avg_lat, 3),
+                    'jitter_ms': round(avg_jitter, 3),
                     'p95_lat_ms': round(p95_lat, 3),
                     'p99_lat_ms': round(p99_lat, 3),
                     'min_lat_ms': round(min_lat, 3),
@@ -1204,7 +1239,7 @@ class MonitorNode(Node):
             labels: labels,
             datasets: [
                 {{
-                    label: 'Avg Latency (ms)',
+                    label: '{"Avg Interval Δt (ms)" if self.mode == "passive" else "Avg Latency (ms)"}',
                     data: avgLats,
                     borderColor: '#0284c7',
                     backgroundColor: 'rgba(2, 132, 199, 0.08)',
@@ -1214,7 +1249,7 @@ class MonitorNode(Node):
                     pointRadius: 0
                 }},
                 {{
-                    label: 'Max Latency (ms)',
+                    label: '{"Max Interval Δt (ms)" if self.mode == "passive" else "Max Latency (ms)"}',
                     data: maxLats,
                     borderColor: '#ea580c',
                     borderWidth: 2,
@@ -1222,14 +1257,24 @@ class MonitorNode(Node):
                     fill: false,
                     tension: 0.2,
                     pointRadius: 0
-                }}
+                }}{ f''',
+                {{
+                    label: 'Deadline Budget ({self.target_period_ms:.2f} ms)',
+                    data: history.map(() => {round(self.target_period_ms, 2)}),
+                    borderColor: '#dc2626',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0
+                }}''' if self.mode == 'passive' else '' }
             ]
         }},
         options: {{
             ...commonOpts,
             scales: {{
                 ...commonOpts.scales,
-                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Latensi (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: '{"Jeda Kedatangan Δt (ms)" if self.mode == "passive" else "Latensi (ms)"}', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
             }}
         }}
     }});
@@ -1241,7 +1286,7 @@ class MonitorNode(Node):
             labels: labels,
             datasets: [
                 {{
-                    label: 'p95 Latency (ms)',
+                    label: '{"p95 Interval (ms)" if self.mode == "passive" else "p95 Latency (ms)"}',
                     data: p95Lats,
                     borderColor: '#d97706',
                     backgroundColor: 'rgba(217, 119, 6, 0.06)',
@@ -1251,7 +1296,7 @@ class MonitorNode(Node):
                     pointRadius: 0
                 }},
                 {{
-                    label: 'p99 Latency (Tail)',
+                    label: '{"p99 Interval (Tail)" if self.mode == "passive" else "p99 Latency (Tail)"}',
                     data: p99Lats,
                     borderColor: '#dc2626',
                     borderWidth: 2.5,
@@ -1265,7 +1310,7 @@ class MonitorNode(Node):
             ...commonOpts,
             scales: {{
                 ...commonOpts.scales,
-                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: 'Tail Latency (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
+                y: {{ ...commonOpts.scales.y, title: {{ display: true, text: '{"Tail Interval (ms)" if self.mode == "passive" else "Tail Latency (ms)"}', color: '#475569', font: {{ weight: '700', size: 10 }} }} }}
             }}
         }}
     }});
@@ -1304,7 +1349,7 @@ class MonitorNode(Node):
             labels: labels,
             datasets: [
                 {{
-                    label: 'Latensi Terukur (Clock Skew, ms)',
+                    label: '{"Inter-arrival Δt (ms)" if self.mode == "passive" else "Latensi Terukur (Clock Skew, ms)"}',
                     data: lastLats,
                     borderColor: '#7c3aed',
                     backgroundColor: 'rgba(124, 58, 237, 0.06)',
@@ -1330,15 +1375,15 @@ class MonitorNode(Node):
             scales: {{
                 ...commonOpts.scales,
                 y: {{
-                    beginAtZero: false,
-                    suggestedMin: -2,
+                    beginAtZero: {'true' if self.mode == 'passive' else 'false'},
+                    suggestedMin: {0 if self.mode == 'passive' else -2},
                     suggestedMax: 4,
                     grid: {{
                         color: (ctx) => ctx.tick.value === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(0, 0, 0, 0.05)',
                         lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1
                     }},
                     ticks: {{ font: {{ weight: '600' }} }},
-                    title: {{ display: true, text: 'Latensi & Jitter (ms)', color: '#475569', font: {{ weight: '700', size: 10 }} }}
+                    title: {{ display: true, text: '{"Jeda Waktu & Jitter (ms)" if self.mode == "passive" else "Latensi & Jitter (ms)"}', color: '#475569', font: {{ weight: '700', size: 10 }} }}
                 }}
             }}
         }}
