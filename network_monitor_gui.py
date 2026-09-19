@@ -1359,6 +1359,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        base_dir = Path(__file__).resolve().parent
+        super().__init__(*args, directory=str(base_dir), **kwargs)
+
     def do_GET(self):
         if self.path == '/api/stats':
             self.send_response(200)
