@@ -10,6 +10,7 @@ import json
 import statistics
 import threading
 import os
+import html
 from datetime import datetime
 from typing import List, Dict, Any
 from collections import deque
@@ -34,7 +35,7 @@ def get_timestamp_ns(topology: str):
 
 
 def resolve_msg_type(type_str: str):
-    """Dynamically resolve ROS 2 message type from string (e.g. 'sensor_msgs/msg/Imu')."""
+    """Dynamically resolve ROS 2 message type from string (e.g. 'sensor_msgs/msg/Imu' or 'sensor_msgs/Imu')."""
     if not type_str:
         return None
     try:
@@ -49,8 +50,13 @@ def resolve_msg_type(type_str: str):
             idx = parts.index('msg')
             pkg = '.'.join(parts[:idx])
             cls_name = parts[-1]
-            mod = importlib.import_module(f"{pkg}.msg")
-            return getattr(mod, cls_name)
+        elif len(parts) >= 2:
+            pkg = parts[0]
+            cls_name = parts[-1]
+        else:
+            return None
+        mod = importlib.import_module(f"{pkg}.msg")
+        return getattr(mod, cls_name)
     except Exception:
         pass
     return None
@@ -134,7 +140,8 @@ def get_system_health() -> dict:
                 _last_cpu_total = total
                 
                 if total_delta > 0:
-                    cpu_pct = round((1.0 - idle_delta / total_delta) * 100.0, 1)
+                    raw_pct = (1.0 - idle_delta / total_delta) * 100.0
+                    cpu_pct = round(max(0.0, min(100.0, raw_pct)), 1)
     except Exception:
         pass
 
@@ -170,6 +177,13 @@ def get_system_health() -> dict:
     }
 
 
+# Warm up initial CPU stats so first sample doesn't report 0.0%
+try:
+    get_system_health()
+except Exception:
+    pass
+
+
 class MonitorNode(Node):
     def __init__(self):
         super().__init__('network_monitor_gui')
@@ -186,7 +200,9 @@ class MonitorNode(Node):
         self.declare_parameter('qos', 'best_effort')
         
         self.mode = str(self.get_parameter('mode').value).strip().lower()
-        topic_name = self.get_parameter('topic_name').value
+        raw_topic = str(self.get_parameter('topic_name').value).strip()
+        self._topic_name = raw_topic if raw_topic.startswith('/') else ('/' + raw_topic)
+        topic_name = self._topic_name
         self.target_hz = float(self.get_parameter('target_hz').value)
         self.target_period_ms = (1000.0 / self.target_hz) if self.target_hz > 0 else 8.0
         
@@ -350,7 +366,7 @@ class MonitorNode(Node):
                 self._probe_timer.cancel()
             return
             
-        topic_name = self.get_parameter('topic_name').value
+        topic_name = self._topic_name
         qos_str = self.get_parameter('qos').value
         qos_map = {
             'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
@@ -471,7 +487,7 @@ class MonitorNode(Node):
             sys_health_reset = get_system_health()
             self._current_stats = {
                 'mode': self.mode,
-                'topic_name': self.get_parameter('topic_name').value,
+                'topic_name': self._topic_name,
                 'target_hz': self.target_hz,
                 'target_period_ms': round(self.target_period_ms, 2),
                 'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
@@ -537,27 +553,28 @@ class MonitorNode(Node):
         recv_ns = self._ts_func()
         latency_ms = (recv_ns - ts_ns) / 1_000_000.0
         
-        self._last_latency = latency_ms
-        
-        if latency_ms < 0:
-            self._negative_count += 1
-            if not self._clock_skew_warned:
-                self.get_logger().warn('Negative latency detected, potential clock skew')
-                self._clock_skew_warned = True
-                
-        if self._first_seq == -1:
-            self._first_seq = seq
-            self._last_seq = seq
-        else:
-            if seq > self._last_seq + 1:
-                self._total_gaps += seq - self._last_seq - 1
-            self._last_seq = seq
+        with self._lock:
+            self._last_latency = latency_ms
             
-        self._latencies.append(latency_ms)
-        self._all_latencies.append(latency_ms)
-        self._last_payload_size = len(raw)
-        self._msg_count += 1
-        self._total_received += 1
+            if latency_ms < 0:
+                self._negative_count += 1
+                if not self._clock_skew_warned:
+                    self.get_logger().warn('Negative latency detected, potential clock skew')
+                    self._clock_skew_warned = True
+                    
+            if self._first_seq == -1:
+                self._first_seq = seq
+                self._last_seq = seq
+            else:
+                if seq > self._last_seq + 1:
+                    self._total_gaps += seq - self._last_seq - 1
+                self._last_seq = seq
+                
+            self._latencies.append(latency_ms)
+            self._all_latencies.append(latency_ms)
+            self._last_payload_size = len(raw)
+            self._msg_count += 1
+            self._total_received += 1
 
     def _passive_listener_callback(self, msg):
         """Callback for PASSIVE LIVE HEALTH mode: measures inter-arrival delta-T without custom headers."""
@@ -567,25 +584,27 @@ class MonitorNode(Node):
         self._live_feed_connected = True
 
         if not self._is_recording:
-            self._last_recv_ns = now_ns
+            with self._lock:
+                self._last_recv_ns = now_ns
             return
 
-        if self._last_recv_ns is not None:
-            delta_t_ms = (now_ns - self._last_recv_ns) / 1_000_000.0
-            if delta_t_ms > 0:
-                self._current_delta_t = delta_t_ms
-                self._last_latency = delta_t_ms
-                self._current_jitter = abs(delta_t_ms - self.target_period_ms)
+        with self._lock:
+            if self._last_recv_ns is not None:
+                delta_t_ms = (now_ns - self._last_recv_ns) / 1_000_000.0
+                if delta_t_ms > 0:
+                    self._current_delta_t = delta_t_ms
+                    self._last_latency = delta_t_ms
+                    self._current_jitter = abs(delta_t_ms - self.target_period_ms)
 
-                if delta_t_ms > self.overrun_threshold_ms:
-                    self._total_overruns += 1
+                    if delta_t_ms > self.overrun_threshold_ms:
+                        self._total_overruns += 1
 
-                self._latencies.append(delta_t_ms)
-                self._all_latencies.append(delta_t_ms)
-                self._msg_count += 1
-                self._total_received += 1
+                    self._latencies.append(delta_t_ms)
+                    self._all_latencies.append(delta_t_ms)
+                    self._msg_count += 1
+                    self._total_received += 1
 
-        self._last_recv_ns = now_ns
+            self._last_recv_ns = now_ns
 
     def _report_callback(self):
         now = time.time()
@@ -610,9 +629,15 @@ class MonitorNode(Node):
             self._session_state = 'COMPLETED'
             self.get_logger().info(f"✅ [BENCHMARK SELESAI] Target durasi {self._target_duration} detik tercapai!")
 
-        elapsed = now - self._window_start
-        count = self._msg_count
-        latencies = self._latencies
+        with self._lock:
+            elapsed = now - self._window_start
+            count = self._msg_count
+            latencies = list(self._latencies)
+            negative_count = self._negative_count
+            self._latencies.clear()
+            self._msg_count = 0
+            self._negative_count = 0
+            self._window_start = now
         
         if count > 0 and elapsed > 0:
             hz = count / elapsed
@@ -686,7 +711,7 @@ class MonitorNode(Node):
 
         stats = {
             'mode': self.mode,
-            'topic_name': self.get_parameter('topic_name').value,
+            'topic_name': self._topic_name,
             'target_hz': self.target_hz,
             'target_period_ms': round(self.target_period_ms, 2),
             'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
@@ -703,8 +728,8 @@ class MonitorNode(Node):
             'max_lat': round(max_lat, 3),
             'std_lat': round(std_lat, 3),
             'total': self._total_received,
-            'clock_skew': self._negative_count > 0,
-            'negative_count': self._negative_count,
+            'clock_skew': negative_count > 0,
+            'negative_count': negative_count,
             'elapsed': self._session_elapsed,
             'timestamp': round(now, 3),
             'cuda_active': self._cuda_active,
@@ -725,7 +750,6 @@ class MonitorNode(Node):
             'sub_ram_pct': sys_health['ram_pct'],
         }
 
-        
         with self._lock:
             self._current_stats = stats
             self._history.append(stats)
@@ -734,11 +758,6 @@ class MonitorNode(Node):
             f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
             f"Pub Suhu: {stats['pub_cpu_temp_c']}°C ({stats['pub_cpu_pct']}%) | Sub Suhu: {stats['sub_cpu_temp_c']}°C ({stats['sub_cpu_pct']}%)"
         )
-        
-        self._latencies.clear()
-        self._msg_count = 0
-        self._negative_count = 0
-        self._window_start = now
 
     def get_api_data(self):
         with self._lock:
@@ -792,7 +811,7 @@ class MonitorNode(Node):
             peak_sub_cpu_pct = max([h.get('sub_cpu_pct', 0) for h in self._history] or [0])
 
             if self.mode == 'passive':
-                topic_name = self.get_parameter('topic_name').value
+                topic_name = self._topic_name
                 clean_topic = topic_name.strip('/').replace('/', '_')
                 overrun_rate = (self._total_overruns / total_samples * 100.0) if total_samples > 0 else 0.0
                 avg_jitter = statistics.stdev(self._all_latencies) if len(self._all_latencies) > 1 else 0.0
@@ -825,7 +844,7 @@ class MonitorNode(Node):
                 filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
             
             output = io.StringIO()
-            output.write("sep=,\n")
+            output.write("\ufeffsep=,\n")
             writer = csv.writer(output)
             writer.writerow(header)
             writer.writerow(row)
@@ -881,17 +900,22 @@ class MonitorNode(Node):
             history_list = list(self._history)
             events_list = list(self._events)
             
-            cpu_temps = [h.get('cpu_temp_c', 0) for h in history_list if h.get('cpu_temp_c', 0) > 0]
-            peak_cpu_temp = max(cpu_temps) if cpu_temps else 0.0
-            gpu_temps = [h.get('gpu_temp_c', 0) for h in history_list if h.get('gpu_temp_c', 0) > 0]
-            peak_gpu_temp = max(gpu_temps) if gpu_temps else 0.0
-            cpu_usages = [h.get('cpu_pct', 0) for h in history_list]
-            peak_cpu_pct = max(cpu_usages) if cpu_usages else 0.0
-            ram_pcts = [h.get('ram_pct', 0) for h in history_list]
-            peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
+            sub_cpu_temps = [h.get('sub_cpu_temp_c', 0) for h in history_list if h.get('sub_cpu_temp_c', 0) > 0]
+            peak_sub_cpu_temp = max(sub_cpu_temps) if sub_cpu_temps else 0.0
+            sub_gpu_temps = [h.get('sub_gpu_temp_c', 0) for h in history_list if h.get('sub_gpu_temp_c', 0) > 0]
+            peak_sub_gpu_temp = max(sub_gpu_temps) if sub_gpu_temps else 0.0
+            sub_cpu_usages = [h.get('sub_cpu_pct', 0) for h in history_list]
+            peak_sub_cpu_pct = max(sub_cpu_usages) if sub_cpu_usages else 0.0
+            sub_ram_pcts = [h.get('sub_ram_pct', 0) for h in history_list]
+            peak_sub_ram_pct = max(sub_ram_pcts) if sub_ram_pcts else 0.0
+
+            pub_cpu_temps = [h.get('pub_cpu_temp_c', 0) for h in history_list if h.get('pub_cpu_temp_c', 0) > 0]
+            peak_pub_cpu_temp = max(pub_cpu_temps) if pub_cpu_temps else 0.0
+            pub_cpu_usages = [h.get('pub_cpu_pct', 0) for h in history_list]
+            peak_pub_cpu_pct = max(pub_cpu_usages) if pub_cpu_usages else 0.0
 
             if self.mode == 'passive':
-                topic_name = self.get_parameter('topic_name').value
+                topic_name = self._topic_name
                 clean_topic = topic_name.strip('/').replace('/', '_')
                 overrun_rate = (self._total_overruns / total_samples * 100.0) if total_samples > 0 else 0.0
                 report_title = f"BRONE — Live Health & Jitter Report ({topic_name})"
@@ -955,10 +979,17 @@ class MonitorNode(Node):
                     'total_samples': total_samples,
                     'total_gaps': total_gaps,
                     'duration_sec': len(history_list),
-                    'peak_cpu_temp_c': peak_cpu_temp,
-                    'peak_gpu_temp_c': peak_gpu_temp,
-                    'peak_cpu_pct': peak_cpu_pct,
-                    'peak_ram_pct': peak_ram_pct,
+                    'peak_sub_cpu_temp_c': peak_sub_cpu_temp,
+                    'peak_sub_gpu_temp_c': peak_sub_gpu_temp,
+                    'peak_sub_cpu_pct': peak_sub_cpu_pct,
+                    'peak_sub_ram_pct': peak_sub_ram_pct,
+                    'peak_pub_cpu_temp_c': peak_pub_cpu_temp,
+                    'peak_pub_cpu_pct': peak_pub_cpu_pct,
+                    # Backward compatibility aliases
+                    'peak_cpu_temp_c': peak_sub_cpu_temp,
+                    'peak_gpu_temp_c': peak_sub_gpu_temp,
+                    'peak_cpu_pct': peak_sub_cpu_pct,
+                    'peak_ram_pct': peak_sub_ram_pct,
                 },
                 'history': history_list,
                 'events': events_list
@@ -1144,7 +1175,7 @@ class MonitorNode(Node):
 { f'''<div class="event-box">
     <h4>📌 Event / Perintah yang Ditandai Selama Pengujian</h4>
     <div class="event-list">
-        {''.join([f'<span class="event-pill">📌 t={e["second"]}s: {e["label"]}</span>' for e in events_list])}
+        {''.join([f'<span class="event-pill">📌 t={e["second"]}s: {html.escape(str(e["label"]))}</span>' for e in events_list])}
     </div>
 </div>''' if events_list else '' }
 
@@ -1167,7 +1198,7 @@ class MonitorNode(Node):
 
     <div class="chart-box">
         <h3>(c) Kestabilan Throughput Frekuensi (Hz)</h3>
-        <p>Laju pengiriman paket per detik terhadap baseline target 50 Hz.</p>
+        <p>Laju pengiriman paket per detik terhadap baseline target {f"{self.target_hz:.1f} Hz." if self.mode == "passive" else f"{freq_hz:.1f} Hz."}</p>
         <div class="chart-canvas-container">
             <canvas id="chartHz"></canvas>
         </div>
@@ -1182,11 +1213,15 @@ class MonitorNode(Node):
     </div>
 </div>
 
-<div class="tip-callout">
+{ f'''<div class="tip-callout">
+    📖 <strong>Mengapa Jitter & Deadline Overrun Sangat Krusial pada Kontrol Robot BRONE?</strong><br>
+    • <strong>Jitter (StdDev σ):</strong> Latensi tetap (misal 2.0 ms konstan) mudah dikompensasi kontroler, tetapi <strong>Jitter tinggi menyebabkan pergerakan servo motor tersendat (*jerky / stuttering*)</strong>. Target ideal: <strong>&lt; 1.0 ms</strong>.<br>
+    • <strong>Period Budget & Deadline Overrun:</strong> Loop <code>{topic_name}</code> memiliki target budget <code>{self.target_period_ms:.2f} ms</code>. Garis putus-putus merah pada grafik menandakan batas deadline; data yang melampaui garis tersebut memicu degradasi kontrol gerakan robot. Pengukuran pasif ini dihitung murni di sisi penerima sehingga 100% bebas dari clock skew.
+</div>''' if self.mode == 'passive' else '''<div class="tip-callout">
     📖 <strong>Mengapa Jitter & Clock Skew Sangat Krusial pada Paper Robotika?</strong><br>
     • <strong>Jitter (StdDev σ):</strong> Latensi tetap (2.0 ms konstan) mudah dikompensasi kontroler, tetapi <strong>Jitter tinggi menyebabkan pergerakan servo motor tersendat (*jerky / stuttering*)</strong>. Target ideal: <strong>&lt; 1.0 ms</strong>.<br>
     • <strong>Clock Skew Tracker:</strong> Memastikan jam internal NUC dan Jetson tidak memiliki perbedaan waktu (offset). Selama grafik berada di atas garis acuan <code>0 ms</code>, data latensi dijamin 100% valid.
-</div>
+</div>''' }
 
 <footer>
     BRONE ROS 2 Network Monitor • Universitas Brawijaya • Laporan Dihasilkan Secara Otomatis
@@ -1400,7 +1435,8 @@ _monitor_node = None
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    pass
+    allow_reuse_address = True
+    daemon_threads = True
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):

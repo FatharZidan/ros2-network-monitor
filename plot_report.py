@@ -26,6 +26,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+# Ensure UTF-8 output encoding across Windows / Linux consoles
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 
 def parse_brone_csv(filepath: str) -> dict:
     """Parse a BRONE benchmark CSV file, extracting summary and window history if present."""
@@ -37,7 +45,7 @@ def parse_brone_csv(filepath: str) -> dict:
     }
 
     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = [line.strip() for line in f if line.strip() and not line.strip().startswith('sep=')]
+        lines = [line.strip().lstrip('\ufeff') for line in f if line.strip() and not line.strip().lstrip('\ufeff').startswith('sep=')]
 
     if not lines:
         return result
@@ -302,16 +310,16 @@ def generate_html_report(parsed_data: list, output_filename: str):
         <table>
             <thead>
                 <tr>
-                    <th>Topologi</th>
+                    <th>Topologi / Topik</th>
                     <th>Frekuensi (Hz)</th>
-                    <th>Payload (B)</th>
-                    <th>QoS</th>
-                    <th>Avg Lat (ms)</th>
-                    <th>p95 Lat (ms)</th>
-                    <th>p99 Lat (ms)</th>
+                    <th>Payload / Tipe</th>
+                    <th>QoS / Status</th>
+                    <th>Avg Lat / Δt (ms)</th>
+                    <th>p95 (ms)</th>
+                    <th>p99 (ms)</th>
                     <th>Min / Max (ms)</th>
                     <th>Total Sampel</th>
-                    <th>Miss Rate (%)</th>
+                    <th>Drop / Overrun (%)</th>
                 </tr>
             </thead>
             <tbody id="summaryTableBody"></tbody>
@@ -321,17 +329,17 @@ def generate_html_report(parsed_data: list, output_filename: str):
     <div class="section-title">📈 Visualisasi Performa</div>
     <div class="charts-container">
         <div class="chart-box">
-            <h3>Perbandingan Latensi Rata-rata vs p95 vs p99 (ms)</h3>
+            <h3>Perbandingan Latensi & Interval Rata-rata vs p95 vs p99 (ms)</h3>
             <canvas id="chartLatencyComparison"></canvas>
         </div>
         <div class="chart-box">
-            <h3>Stabilitas Frekuensi (Hz) & Miss Rate (%)</h3>
+            <h3>Stabilitas Frekuensi (Hz) & Miss/Overrun Rate (%)</h3>
             <canvas id="chartHzComparison"></canvas>
         </div>
     </div>
 
     <div class="chart-box" id="timeSeriesBox" style="display: none; margin-bottom: 32px;">
-        <h3>Rekaman Riwayat Latensi per Detik (Time Series History)</h3>
+        <h3>Rekaman Riwayat Latensi & Interval per Detik (Time Series History)</h3>
         <canvas id="chartTimeSeries" style="max-height: 280px;"></canvas>
     </div>
 
@@ -351,36 +359,45 @@ def generate_html_report(parsed_data: list, output_filename: str):
 
         data.forEach((item, idx) => {{
             const s = item.summary;
-            const top = s.topology || 'unknown';
-            const avg = typeof s.avg_lat_ms === 'number' ? s.avg_lat_ms.toFixed(3) : (s.avg_lat_ms || '-');
-            const p95 = typeof s.p95_lat_ms === 'number' ? s.p95_lat_ms.toFixed(3) : (s.p95_lat_ms || '-');
-            const p99 = typeof s.p99_lat_ms === 'number' ? s.p99_lat_ms.toFixed(3) : (s.p99_lat_ms || '-');
-            const min = typeof s.min_lat_ms === 'number' ? s.min_lat_ms.toFixed(3) : (s.min_lat_ms || '-');
-            const max = typeof s.max_lat_ms === 'number' ? s.max_lat_ms.toFixed(3) : (s.max_lat_ms || '-');
-            const hz  = typeof s.freq_hz === 'number' ? s.freq_hz.toFixed(1) : (s.freq_hz || '-');
-            const miss = typeof s.miss_rate_percent === 'number' ? s.miss_rate_percent.toFixed(2) : (s.miss_rate_percent || '0.00');
+            const isPassive = (s.mode === 'passive' || !!s.topic_name);
+            const top = isPassive ? (s.topic_name || 'Passive Topic') : (s.topology || 'unknown');
+            const avgVal = isPassive ? s.avg_delta_t_ms : s.avg_lat_ms;
+            const p95Val = isPassive ? s.p95_delta_t_ms : s.p95_lat_ms;
+            const p99Val = isPassive ? s.p99_delta_t_ms : s.p99_lat_ms;
+            const minVal = isPassive ? s.min_delta_t_ms : s.min_lat_ms;
+            const maxVal = isPassive ? s.max_delta_t_ms : s.max_lat_ms;
+            const hzVal  = isPassive ? s.target_hz : s.freq_hz;
+            const missVal = isPassive ? s.overrun_rate_percent : s.miss_rate_percent;
+
+            const avg = typeof avgVal === 'number' ? avgVal.toFixed(3) : (avgVal || '-');
+            const p95 = typeof p95Val === 'number' ? p95Val.toFixed(3) : (p95Val || '-');
+            const p99 = typeof p99Val === 'number' ? p99Val.toFixed(3) : (p99Val || '-');
+            const min = typeof minVal === 'number' ? minVal.toFixed(3) : (minVal || '-');
+            const max = typeof maxVal === 'number' ? maxVal.toFixed(3) : (maxVal || '-');
+            const hz  = typeof hzVal === 'number' ? hzVal.toFixed(1) : (hzVal || '-');
+            const miss = typeof missVal === 'number' ? missVal.toFixed(2) : (missVal || '0.00');
             const total = s.total_samples || s.total || 0;
 
-            topLabels.push(`${{top}} (${{s.freq_hz || 50}}Hz)`);
-            avgLats.push(s.avg_lat_ms || 0);
-            p95Lats.push(s.p95_lat_ms || 0);
-            p99Lats.push(s.p99_lat_ms || 0);
-            freqs.push(s.freq_hz || 0);
-            missRates.push(s.miss_rate_percent || 0);
+            topLabels.push(`${{top}} (${{hz}}Hz)`);
+            avgLats.push(typeof avgVal === 'number' ? avgVal : 0);
+            p95Lats.push(typeof p95Val === 'number' ? p95Val : 0);
+            p99Lats.push(typeof p99Val === 'number' ? p99Val : 0);
+            freqs.push(typeof hzVal === 'number' ? hzVal : 0);
+            missRates.push(typeof missVal === 'number' ? missVal : 0);
 
             // Card
             const card = document.createElement('div');
             card.className = 'card';
             card.innerHTML = `
                 <div class="card-header">
-                    <span class="card-title">Latency Summary</span>
-                    <span class="card-topology">${{top}}</span>
+                    <span class="card-title">${{isPassive ? 'Inter-Arrival Δt' : 'Latency Summary'}}</span>
+                    <span class="card-topology">${{isPassive ? '🩺 ' + top : top}}</span>
                 </div>
                 <div class="metric-main">${{avg}} <span style="font-size: 16px; font-weight: normal; color: var(--text-secondary);">ms</span></div>
                 <div class="metric-sub-grid">
-                    <div class="metric-sub-item"><div class="label">p95 Latency</div><div class="val" style="color: var(--accent-orange);">${{p95}} ms</div></div>
-                    <div class="metric-sub-item"><div class="label">p99 Latency</div><div class="val" style="color: var(--accent-red);">${{p99}} ms</div></div>
-                    <div class="metric-sub-item"><div class="label">Miss Rate</div><div class="val">${{miss}}%</div></div>
+                    <div class="metric-sub-item"><div class="label">${{isPassive ? 'p95 Δt' : 'p95 Latency'}}</div><div class="val" style="color: var(--accent-orange);">${{p95}} ms</div></div>
+                    <div class="metric-sub-item"><div class="label">${{isPassive ? 'p99 Δt' : 'p99 Latency'}}</div><div class="val" style="color: var(--accent-red);">${{p99}} ms</div></div>
+                    <div class="metric-sub-item"><div class="label">${{isPassive ? 'Overrun Rate' : 'Miss Rate'}}</div><div class="val">${{miss}}%</div></div>
                 </div>
             `;
             cardsContainer.appendChild(card);
@@ -388,10 +405,10 @@ def generate_html_report(parsed_data: list, output_filename: str):
             // Table Row
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><strong style="color: var(--accent-blue);">${{top}}</strong></td>
+                <td><strong style="color: var(--accent-blue);">${{top}}</strong> ${{isPassive ? '<span style="font-size:10px; padding:2px 6px; background:rgba(0,212,170,0.15); color:#00d4aa; border-radius:4px; font-weight:700; margin-left:6px;">PASSIVE</span>' : ''}}</td>
                 <td>${{hz}}</td>
-                <td>${{s.payload_size_bytes || 128}}</td>
-                <td>${{s.qos_profile || 'best_effort'}}</td>
+                <td>${{isPassive ? '-' : (s.payload_size_bytes || 128)}}</td>
+                <td>${{isPassive ? (s.health_status || 'HEALTHY') : (s.qos_profile || 'best_effort')}}</td>
                 <td style="color: var(--accent-green); font-weight: 600;">${{avg}}</td>
                 <td style="color: var(--accent-orange);">${{p95}}</td>
                 <td style="color: var(--accent-red);">${{p99}}</td>
@@ -511,31 +528,32 @@ def generate_matplotlib_png(parsed_data: list, output_png: str):
 
     for item in parsed_data:
         s = item['summary']
-        top = s.get('topology', 'unknown')
-        hz = s.get('freq_hz', 50)
+        is_passive = (s.get('mode') == 'passive' or 'topic_name' in s)
+        top = s.get('topic_name', s.get('topology', 'unknown'))
+        hz = s.get('target_hz') if is_passive else s.get('freq_hz', 50)
         top_labels.append(f"{top}\n({hz}Hz)")
-        avg_lats.append(s.get('avg_lat_ms', 0.0))
-        p95_lats.append(s.get('p95_lat_ms', 0.0))
-        p99_lats.append(s.get('p99_lat_ms', 0.0))
-        freqs.append(s.get('freq_hz', 0.0))
+        avg_lats.append(s.get('avg_delta_t_ms') if is_passive else s.get('avg_lat_ms', 0.0))
+        p95_lats.append(s.get('p95_delta_t_ms') if is_passive else s.get('p95_lat_ms', 0.0))
+        p99_lats.append(s.get('p99_delta_t_ms') if is_passive else s.get('p99_lat_ms', 0.0))
+        freqs.append(hz if isinstance(hz, (int, float)) else 0.0)
 
     x = range(len(top_labels))
     width = 0.25
 
     # Subplot 1: Latency Metrics
-    ax1.bar([i - width for i in x], avg_lats, width=width, label='Avg Latency', color='#00d4aa')
-    ax1.bar(x, p95_lats, width=width, label='p95 Latency', color='#f59e0b')
-    ax1.bar([i + width for i in x], p99_lats, width=width, label='p99 Latency', color='#ef4444')
-    ax1.set_ylabel('Latency (ms)')
-    ax1.set_title('Perbandingan Latensi Antar Skenario (ms)')
+    ax1.bar([i - width for i in x], avg_lats, width=width, label='Avg Latency / Δt', color='#00d4aa')
+    ax1.bar(x, p95_lats, width=width, label='p95 Latency / Δt', color='#f59e0b')
+    ax1.bar([i + width for i in x], p99_lats, width=width, label='p99 Latency / Δt', color='#ef4444')
+    ax1.set_ylabel('Latency / Interval Δt (ms)')
+    ax1.set_title('Perbandingan Latensi & Interval Antar Skenario (ms)')
     ax1.set_xticks(x)
     ax1.set_xticklabels(top_labels)
     ax1.legend(facecolor='#161624', edgecolor='#33334d', labelcolor='#e8e8f0')
     ax1.grid(True, color='#252538', linestyle='--', alpha=0.5)
 
     # Subplot 2: Frequency Stability
-    ax2.bar(x, freqs, width=0.4, label='Measured Hz', color='#38bdf8')
-    ax2.axhline(50, color='#f59e0b', linestyle='--', label='Target 50 Hz')
+    ax2.bar(x, freqs, width=0.4, label='Measured / Target Hz', color='#38bdf8')
+    ax2.axhline(50, color='#f59e0b', linestyle='--', label='Baseline 50 Hz')
     ax2.set_ylabel('Frekuensi (Hz)')
     ax2.set_title('Stabilitas Frekuensi Komunikasi (Hz)')
     ax2.set_xticks(x)
@@ -552,11 +570,11 @@ def generate_matplotlib_png(parsed_data: list, output_png: str):
 def main():
     args = sys.argv[1:]
 
-    # If no files specified, search for all brone_log_*.csv in current dir
+    # If no files specified, search for all brone_log_*.csv and brone_health_*.csv in current dir
     if not args:
-        csv_files = sorted(glob.glob("brone_log_*.csv"))
+        csv_files = sorted(glob.glob("brone_log_*.csv") + glob.glob("brone_health_*.csv"))
         if not csv_files:
-            print("❌ Tidak ditemukan file 'brone_log_*.csv' di direktori saat ini.")
+            print("❌ Tidak ditemukan file 'brone_log_*.csv' atau 'brone_health_*.csv' di direktori saat ini.")
             print("Penggunaan: python3 plot_report.py <nama_file.csv>")
             sys.exit(1)
         print(f"🔍 Ditemukan {len(csv_files)} file CSV log.")
@@ -578,7 +596,12 @@ def main():
         p = parse_brone_csv(f)
         if p['summary']:
             parsed_reports.append(p)
-            print(f"  ✓ Membaca log: {Path(f).name} (Topology: {p['summary'].get('topology')})")
+            s = p['summary']
+            if s.get('mode') == 'passive' or 'topic_name' in s:
+                desc = f"Topic: {s.get('topic_name')} @ {s.get('target_hz')}Hz"
+            else:
+                desc = f"Topology: {s.get('topology')} @ {s.get('freq_hz')}Hz"
+            print(f"  ✓ Membaca log: {Path(f).name} ({desc})")
 
     if not parsed_reports:
         print("❌ Tidak ada data valid di file CSV yang dibaca.")

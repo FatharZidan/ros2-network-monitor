@@ -137,18 +137,18 @@ Wajib dijalankan sebelum pengujian lintas mesin (`nuc2jetson` / `jetson2nuc`):
 > Gunakan mode ini saat robot BRONE sedang beroperasi aktif (menjalankan `op3_manager`, `brone_talk.py`, atau pelacakan wajah `gaze_node`). Node monitor akan mengendus (*sniffing*) topik nyata tanpa menyuntikkan paket buatan, menghitung interval kedatangan data antar-frame ($\Delta t$), mendeteksi *deadline overrun*, dan memantau suhu/beban CPU secara non-intrusif (100% bebas dari clock skew).
 
 ### 🟢 1. Menginspeksi Loop Sensor IMU OpenCR (125 Hz — Deadline Budget 8.0 ms)
-* **Jalankan di NUC:**
+* **Jalankan di NUC (atau Jetson):**
   ```bash
-  source /opt/ros/jazzy/setup.bash
+  source ~/.bashrc  # (Otomatis memuat ROS 2 Jazzy di NUC atau Humble di Jetson)
   cd ~/ros2_network_monitor
   python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/robotis/open_cr/imu -p target_hz:=125.0
   ```
 👉 *Buka Browser: `http://192.168.100.1:8765` (atau via IP laptop penguji).*
 
 ### 🟢 2. Menginspeksi Feedback Sudut Sendi / Joint States (50 Hz — Deadline Budget 20.0 ms)
-* **Jalankan di NUC:**
+* **Jalankan di NUC (atau Jetson):**
   ```bash
-  source /opt/ros/jazzy/setup.bash
+  source ~/.bashrc
   cd ~/ros2_network_monitor
   python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/robotis/present_joint_states -p target_hz:=50.0
   ```
