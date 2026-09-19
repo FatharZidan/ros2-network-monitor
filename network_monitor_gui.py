@@ -33,6 +33,29 @@ def get_timestamp_ns(topology: str):
         raise ValueError(f"Topology tidak valid: {topology}")
 
 
+def resolve_msg_type(type_str: str):
+    """Dynamically resolve ROS 2 message type from string (e.g. 'sensor_msgs/msg/Imu')."""
+    if not type_str:
+        return None
+    try:
+        from rosidl_runtime_py.utilities import get_message
+        return get_message(type_str)
+    except Exception:
+        pass
+    try:
+        import importlib
+        parts = type_str.replace('/', '.').split('.')
+        if 'msg' in parts:
+            idx = parts.index('msg')
+            pkg = '.'.join(parts[:idx])
+            cls_name = parts[-1]
+            mod = importlib.import_module(f"{pkg}.msg")
+            return getattr(mod, cls_name)
+    except Exception:
+        pass
+    return None
+
+
 def calculate_percentile(data: list, p: float) -> float:
     """Calculate percentile without external libraries."""
     if not data:
@@ -152,18 +175,39 @@ class MonitorNode(Node):
         super().__init__('network_monitor_gui')
         
         # ROS parameters
+        self.declare_parameter('mode', 'synthetic')           # 'synthetic' or 'passive'
         self.declare_parameter('topic_name', '/test_topic')
+        self.declare_parameter('target_hz', 125.0)
+        self.declare_parameter('topic_type', '')              # Optional explicit type (e.g. 'sensor_msgs/msg/Imu')
+        self.declare_parameter('overrun_threshold_ms', 0.0)   # If 0.0, auto-calculated as (1000.0 / target_hz)
         self.declare_parameter('report_interval', 1.0)
         self.declare_parameter('http_port', 8765)
         self.declare_parameter('topology', 'nuc2nuc')
         self.declare_parameter('qos', 'best_effort')
         
+        self.mode = str(self.get_parameter('mode').value).strip().lower()
         topic_name = self.get_parameter('topic_name').value
+        self.target_hz = float(self.get_parameter('target_hz').value)
+        self.target_period_ms = (1000.0 / self.target_hz) if self.target_hz > 0 else 8.0
+        
+        overrun_param = float(self.get_parameter('overrun_threshold_ms').value)
+        self.overrun_threshold_ms = overrun_param if overrun_param > 0 else self.target_period_ms
+        self.topic_type_str = str(self.get_parameter('topic_type').value).strip()
+        
         report_interval = self.get_parameter('report_interval').value
         self.http_port = self.get_parameter('http_port').value
         topology = self.get_parameter('topology').value
         
         self._ts_func = get_timestamp_ns(topology)
+        
+        # Inter-arrival & Passive metrics
+        self._last_recv_ns = None
+        self._total_overruns = 0
+        self._current_delta_t = 0.0
+        self._current_jitter = 0.0
+        self._health_status = 'HEALTHY'
+        self._health_reasons = []
+        self._sub_bound = False
         
         self._latencies: List[float] = []
         self._msg_count = 0
@@ -198,6 +242,17 @@ class MonitorNode(Node):
 
         sys_health_init = get_system_health()
         self._current_stats = {
+            'mode': self.mode,
+            'topic_name': topic_name,
+            'target_hz': self.target_hz,
+            'target_period_ms': round(self.target_period_ms, 2),
+            'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
+            'current_delta_t_ms': 0.0,
+            'current_jitter_ms': 0.0,
+            'total_overruns': 0,
+            'overrun_rate_percent': 0.0,
+            'health_status': 'HEALTHY',
+            'health_reasons': [],
             'hz': 0.0,
             'count': 0,
             'avg_lat': 0.0,
@@ -239,10 +294,74 @@ class MonitorNode(Node):
             depth=10,
         )
         
-        self.create_subscription(UInt8MultiArray, topic_name, self._listener_callback, qos_profile)
+        if self.mode == 'synthetic':
+            self.create_subscription(UInt8MultiArray, topic_name, self._listener_callback, qos_profile)
+            self._sub_bound = True
+            self.get_logger().info(f"🚀 [SYNTHETIC MODE] Subscribed to {topic_name} (Topology: {topology}, QoS: {qos_str})")
+        else:
+            self._bind_passive_subscription(topic_name, qos_profile)
+            self.get_logger().info(
+                f"🩺 [PASSIVE LIVE MODE] Topic: {topic_name} | Target: {self.target_hz} Hz ({self.target_period_ms:.2f} ms)"
+            )
+
         self.create_subscription(String, '/brone/command', self._command_callback, 10)
         self.create_subscription(String, '/brone/event_marker', self._command_callback, 10)
         self.create_timer(report_interval, self._report_callback)
+
+    def _bind_passive_subscription(self, topic_name: str, qos_profile: QoSProfile):
+        """Bind subscription dynamically for any ROS 2 topic in passive mode."""
+        msg_cls = None
+        if self.topic_type_str:
+            msg_cls = resolve_msg_type(self.topic_type_str)
+            if msg_cls:
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self._sub_bound = True
+                self.get_logger().info(f"✅ Bound passive subscription with specified type: {self.topic_type_str}")
+                return
+
+        # Attempt auto-detection from ROS 2 graph
+        topic_dict = dict(self.get_topic_names_and_types())
+        if topic_name in topic_dict and topic_dict[topic_name]:
+            detected_type = topic_dict[topic_name][0]
+            msg_cls = resolve_msg_type(detected_type)
+            if msg_cls:
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self._sub_bound = True
+                self.get_logger().info(f"✅ Auto-detected topic {topic_name} with type: {detected_type}")
+                return
+
+        # Fallback: start periodic probe timer to bind as soon as the topic appears
+        self._probe_timer = self.create_timer(1.0, self._probe_topic_callback)
+        self.get_logger().info(f"⏳ Waiting for topic '{topic_name}' to appear on graph to auto-detect type...")
+
+    def _probe_topic_callback(self):
+        """Periodically look for the target topic until it appears on the graph."""
+        if self._sub_bound:
+            if hasattr(self, '_probe_timer') and self._probe_timer:
+                self._probe_timer.cancel()
+            return
+            
+        topic_name = self.get_parameter('topic_name').value
+        qos_str = self.get_parameter('qos').value
+        qos_map = {
+            'best_effort': QoSReliabilityPolicy.BEST_EFFORT,
+            'reliable': QoSReliabilityPolicy.RELIABLE,
+        }
+        qos_profile = QoSProfile(
+            reliability=qos_map.get(qos_str, QoSReliabilityPolicy.BEST_EFFORT),
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        topic_dict = dict(self.get_topic_names_and_types())
+        if topic_name in topic_dict and topic_dict[topic_name]:
+            detected_type = topic_dict[topic_name][0]
+            msg_cls = resolve_msg_type(detected_type)
+            if msg_cls:
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_profile)
+                self._sub_bound = True
+                self.get_logger().info(f"✅ Topic '{topic_name}' discovered! Bound with type: {detected_type}")
+                if hasattr(self, '_probe_timer') and self._probe_timer:
+                    self._probe_timer.cancel()
 
     def _command_callback(self, msg):
         """Auto-record event marker from robot CLI commands."""
@@ -311,8 +430,28 @@ class MonitorNode(Node):
             self._last_pub_gpu_temp = 0.0
             self._last_pub_cpu_pct = 0.0
             self._last_pub_ram_pct = 0.0
+            
+            # Reset passive metrics
+            self._last_recv_ns = None
+            self._total_overruns = 0
+            self._current_delta_t = 0.0
+            self._current_jitter = 0.0
+            self._health_status = 'HEALTHY'
+            self._health_reasons = []
+
             sys_health_reset = get_system_health()
             self._current_stats = {
+                'mode': self.mode,
+                'topic_name': self.get_parameter('topic_name').value,
+                'target_hz': self.target_hz,
+                'target_period_ms': round(self.target_period_ms, 2),
+                'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
+                'current_delta_t_ms': 0.0,
+                'current_jitter_ms': 0.0,
+                'total_overruns': 0,
+                'overrun_rate_percent': 0.0,
+                'health_status': 'HEALTHY',
+                'health_reasons': [],
                 'hz': 0.0,
                 'count': 0,
                 'avg_lat': 0.0,
@@ -343,6 +482,7 @@ class MonitorNode(Node):
             self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
     def _listener_callback(self, msg):
+        """Callback for SYNTHETIC mode: unpacks 24-byte binary telemetry header."""
         raw = bytes(msg.data)
         if len(raw) < 16:
             self.get_logger().warn('Received message too short')
@@ -390,12 +530,47 @@ class MonitorNode(Node):
         self._msg_count += 1
         self._total_received += 1
 
+    def _passive_listener_callback(self, msg):
+        """Callback for PASSIVE LIVE HEALTH mode: measures inter-arrival delta-T without custom headers."""
+        now_ns = time.perf_counter_ns()
+        now_ts = time.time()
+        self._last_msg_recv_time = now_ts
+        self._live_feed_connected = True
+
+        if not self._is_recording:
+            self._last_recv_ns = now_ns
+            return
+
+        if self._last_recv_ns is not None:
+            delta_t_ms = (now_ns - self._last_recv_ns) / 1_000_000.0
+            if delta_t_ms > 0:
+                self._current_delta_t = delta_t_ms
+                self._last_latency = delta_t_ms
+                self._current_jitter = abs(delta_t_ms - self.target_period_ms)
+
+                if delta_t_ms > self.overrun_threshold_ms:
+                    self._total_overruns += 1
+
+                self._latencies.append(delta_t_ms)
+                self._all_latencies.append(delta_t_ms)
+                self._msg_count += 1
+                self._total_received += 1
+
+        self._last_recv_ns = now_ns
+
     def _report_callback(self):
         now = time.time()
         self._live_feed_connected = (now - self._last_msg_recv_time) < 2.0
         
-        # If IDLE or COMPLETED, just maintain keep-alive
+        # If IDLE or COMPLETED, maintain system health telemetry but skip recording stats
         if not self._is_recording:
+            sys_health = get_system_health()
+            with self._lock:
+                self._current_stats['sub_cpu_temp_c'] = sys_health['cpu_temp_c']
+                self._current_stats['sub_gpu_temp_c'] = sys_health['gpu_temp_c']
+                self._current_stats['sub_cpu_pct'] = sys_health['cpu_pct']
+                self._current_stats['sub_ram_used_mb'] = sys_health['ram_used_mb']
+                self._current_stats['sub_ram_pct'] = sys_health['ram_pct']
             return
             
         self._session_elapsed = int(now - self._session_start_time)
@@ -427,18 +602,67 @@ class MonitorNode(Node):
             p95 = 0.0
             p99 = 0.0
             
-        if self._first_seq >= 0:
-            total_expected = self._last_seq - self._first_seq + 1
-            if total_expected > 0:
-                miss_rate = (self._total_gaps / total_expected) * 100.0
+        sys_health = get_system_health()
+
+        if self.mode == 'passive':
+            overrun_rate = (self._total_overruns / self._total_received * 100.0) if self._total_received > 0 else 0.0
+            miss_rate = overrun_rate
+            
+            # Health assessment logic
+            status = 'HEALTHY'
+            reasons = []
+            
+            if sys_health['cpu_pct'] > 90.0:
+                status = 'CRITICAL'
+                reasons.append(f"CPU overload: {sys_health['cpu_pct']:.1f}%")
+            elif sys_health['cpu_pct'] > 75.0:
+                status = 'DEGRADED' if status != 'CRITICAL' else status
+                reasons.append(f"Beban CPU tinggi: {sys_health['cpu_pct']:.1f}%")
+                
+            if sys_health['cpu_temp_c'] > 85.0:
+                status = 'CRITICAL'
+                reasons.append(f"Suhu CPU kritis: {sys_health['cpu_temp_c']:.1f}°C")
+            elif sys_health['cpu_temp_c'] > 78.0:
+                status = 'DEGRADED' if status != 'CRITICAL' else status
+                reasons.append(f"Suhu CPU panas: {sys_health['cpu_temp_c']:.1f}°C")
+                
+            if overrun_rate > 10.0:
+                status = 'CRITICAL'
+                reasons.append(f"Overrun tinggi: {overrun_rate:.1f}% melampaui deadline {self.target_period_ms:.1f}ms")
+            elif overrun_rate > 2.0:
+                status = 'DEGRADED' if status != 'CRITICAL' else status
+                reasons.append(f"Jitter terdeteksi: {overrun_rate:.1f}% melampaui deadline {self.target_period_ms:.1f}ms")
+                
+            if self.target_hz > 0 and hz > 0:
+                hz_diff = abs(hz - self.target_hz) / self.target_hz
+                if hz_diff > 0.15:
+                    status = 'DEGRADED' if status != 'CRITICAL' else status
+                    reasons.append(f"Frekuensi drop: {hz:.1f} Hz (Target: {self.target_hz:.1f} Hz)")
+                    
+            self._health_status = status
+            self._health_reasons = reasons
+        else:
+            overrun_rate = 0.0
+            if self._first_seq >= 0:
+                total_expected = self._last_seq - self._first_seq + 1
+                miss_rate = (self._total_gaps / total_expected * 100.0) if total_expected > 0 else 0.0
             else:
                 miss_rate = 0.0
-        else:
-            miss_rate = 0.0
-            
-        sys_health = get_system_health()
-        
+            self._health_status = 'HEALTHY'
+            self._health_reasons = []
+
         stats = {
+            'mode': self.mode,
+            'topic_name': self.get_parameter('topic_name').value,
+            'target_hz': self.target_hz,
+            'target_period_ms': round(self.target_period_ms, 2),
+            'overrun_threshold_ms': round(self.overrun_threshold_ms, 2),
+            'current_delta_t_ms': round(self._current_delta_t, 3),
+            'current_jitter_ms': round(self._current_jitter, 3),
+            'total_overruns': self._total_overruns,
+            'overrun_rate_percent': round(overrun_rate, 2),
+            'health_status': self._health_status,
+            'health_reasons': self._health_reasons,
             'hz': round(hz, 2),
             'count': count,
             'avg_lat': round(avg_lat, 3),
@@ -467,6 +691,7 @@ class MonitorNode(Node):
             'sub_ram_used_mb': sys_health['ram_used_mb'],
             'sub_ram_pct': sys_health['ram_pct'],
         }
+
         
         with self._lock:
             self._current_stats = stats
@@ -533,20 +758,37 @@ class MonitorNode(Node):
             peak_pub_cpu_pct = max([h.get('pub_cpu_pct', 0) for h in self._history] or [0])
             peak_sub_cpu_pct = max([h.get('sub_cpu_pct', 0) for h in self._history] or [0])
 
-            header = [
-                "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
-                "total_samples", "total_expected", "total_gaps",
-                "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms",
-                "peak_pub_cpu_temp_c", "peak_pub_cpu_pct", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
-            ]
-            row = [
-                iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
-                total_samples, total_expected, total_gaps,
-                round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
-                peak_pub_cpu_temp, peak_pub_cpu_pct, peak_sub_cpu_temp, peak_sub_cpu_pct
-            ]
-            
-            filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
+            if self.mode == 'passive':
+                topic_name = self.get_parameter('topic_name').value
+                clean_topic = topic_name.strip('/').replace('/', '_')
+                overrun_rate = (self._total_overruns / total_samples * 100.0) if total_samples > 0 else 0.0
+                header = [
+                    "session_timestamp", "mode", "topic_name", "target_hz", "target_period_ms", "overrun_threshold_ms",
+                    "total_samples", "total_overruns", "overrun_rate_percent",
+                    "avg_delta_t_ms", "min_delta_t_ms", "max_delta_t_ms", "p95_delta_t_ms", "p99_delta_t_ms",
+                    "health_status", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
+                ]
+                row = [
+                    iso_ts, self.mode, topic_name, self.target_hz, round(self.target_period_ms, 2), round(self.overrun_threshold_ms, 2),
+                    total_samples, self._total_overruns, round(overrun_rate, 2),
+                    round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
+                    self._health_status, peak_sub_cpu_temp, peak_sub_cpu_pct
+                ]
+                filename = f"brone_health_{clean_topic}_{int(self.target_hz)}hz_{ts_str}.csv"
+            else:
+                header = [
+                    "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
+                    "total_samples", "total_expected", "total_gaps",
+                    "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms",
+                    "peak_pub_cpu_temp_c", "peak_pub_cpu_pct", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
+                ]
+                row = [
+                    iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
+                    total_samples, total_expected, total_gaps,
+                    round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
+                    peak_pub_cpu_temp, peak_pub_cpu_pct, peak_sub_cpu_temp, peak_sub_cpu_pct
+                ]
+                filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
             
             output = io.StringIO()
             output.write("sep=,\n")
@@ -614,15 +856,60 @@ class MonitorNode(Node):
             ram_pcts = [h.get('ram_pct', 0) for h in history_list]
             peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
 
-            report_data = {
-                'filename': f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv",
-                'metadata': {
+            if self.mode == 'passive':
+                topic_name = self.get_parameter('topic_name').value
+                clean_topic = topic_name.strip('/').replace('/', '_')
+                overrun_rate = (self._total_overruns / total_samples * 100.0) if total_samples > 0 else 0.0
+                report_title = f"BRONE — Live Health & Jitter Report ({topic_name})"
+                filename = f"brone_report_health_{clean_topic}_{int(self.target_hz)}hz_{ts_str}.html"
+                csv_filename = f"brone_health_{clean_topic}_{int(self.target_hz)}hz_{ts_str}.csv"
+                header_title = "🩺 Laporan Kesehatan & Jitter Topik ROS 2 (BRONE)"
+                header_subtitle = f"Topik: <code>{topic_name}</code> • Status: <strong>{self._health_status}</strong> • Durasi: {len(history_list)} detik"
+                label_avg = "Avg Interval (Δt)"
+                label_p95 = "p95 Interval"
+                label_p99 = "p99 Interval (Tail)"
+                label_drop_desc = "Total Sampel / Overrun"
+                label_samples_drop = f"{total_samples:,} <span class=\"metric-unit\">/ {self._total_overruns} overrun ({overrun_rate:.1f}%)</span>"
+                chart_a_title = "(a) Inter-Arrival Interval: Rata-rata & Puncak (Avg vs Max)"
+                chart_a_desc = "Menunjukkan jeda kedatangan data aktual (Avg) vs lonjakan tertinggi (Max) per detik."
+                chart_d_title = "(d) Stabilitas Jitter (ms)"
+                chart_d_desc = f"Jeda waktu kedatangan data vs Target Period {self.target_period_ms:.2f} ms & Jitter StdDev σ (ms)."
+                metadata = {
+                    'Session Timestamp': iso_ts,
+                    'Mode': 'Passive Real-World Topic Health Inspector',
+                    'Monitored Topic': topic_name,
+                    'Target Frequency': f"{self.target_hz:.1f} Hz",
+                    'Target Interval (Budget)': f"{self.target_period_ms:.2f} ms",
+                    'Overrun Threshold': f"{self.overrun_threshold_ms:.2f} ms",
+                    'Overall Health Status': self._health_status,
+                    'Deadline Overruns': f"{self._total_overruns} ({overrun_rate:.2f}%)"
+                }
+            else:
+                report_title = "BRONE — ROS 2 Network Latency Benchmark Report"
+                filename = f"brone_report_{topology}_{int(freq_hz)}hz_{ts_str}.html"
+                csv_filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
+                header_title = "📊 Laporan Uji Latensi & Jitter ROS 2 (BRONE)"
+                header_subtitle = f"File Sumber: <code>{csv_filename}</code> • Durasi: {len(history_list)} detik • Format Siap Paper / PPT"
+                label_avg = "Avg Latency"
+                label_p95 = "p95 Latency"
+                label_p99 = "p99 Latency (Tail)"
+                label_drop_desc = "Total Sampel / Gaps"
+                label_samples_drop = f"{total_samples:,} <span class=\"metric-unit\">/ {total_gaps} drop</span>"
+                chart_a_title = "(a) Latensi Operasional: Rata-rata & Puncak (Avg vs Max)"
+                chart_a_desc = "Menunjukkan latensi tipikal (Avg) vs lonjakan tertinggi (Max) per detik."
+                chart_d_title = "(d) Clock Skew & Stabilitas Jitter (ms)"
+                chart_d_desc = "Latensi sampel vs garis 0 ms (Clock Sync) & Fluktuasi Jitter StdDev σ (ms)."
+                metadata = {
                     'Session Timestamp': iso_ts,
                     'Topology': topology,
                     'Target Frequency': f"{freq_hz} Hz",
                     'Payload Size': f"{self._last_payload_size} Bytes",
                     'QoS Profile': qos_str
-                },
+                }
+
+            report_data = {
+                'filename': csv_filename,
+                'metadata': metadata,
                 'summary': {
                     'avg_lat_ms': round(avg_lat, 3),
                     'p95_lat_ms': round(p95_lat, 3),
@@ -643,14 +930,13 @@ class MonitorNode(Node):
             }
             
             report_json = json.dumps(report_data, indent=2)
-            filename = f"brone_report_{topology}_{int(freq_hz)}hz_{ts_str}.html"
             
             html_content = f"""<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BRONE — ROS 2 Network Latency Benchmark Report</title>
+    <title>{report_title}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -785,8 +1071,8 @@ class MonitorNode(Node):
 
 <header>
     <div class="header-title">
-        <h1>📊 Laporan Uji Latensi & Jitter ROS 2 (BRONE)</h1>
-        <p>File Sumber: <code>{report_data['filename']}</code> • Durasi: {len(history_list)} detik • Format Siap Paper / PPT</p>
+        <h1>{header_title}</h1>
+        <p>{header_subtitle}</p>
     </div>
     <button class="btn-print" onclick="window.print()">
         <span>🖨️ Cetak / Simpan PDF</span>
@@ -795,7 +1081,7 @@ class MonitorNode(Node):
 
 <div class="metrics-grid">
     <div class="metric-card">
-        <div class="metric-label">Avg Latency</div>
+        <div class="metric-label">{label_avg}</div>
         <div class="metric-val">{avg_lat:.2f} <span class="metric-unit">ms</span></div>
     </div>
     <div class="metric-card">
@@ -803,11 +1089,11 @@ class MonitorNode(Node):
         <div class="metric-val" style="color: var(--accent-purple);">{avg_jitter:.2f} <span class="metric-unit">ms</span></div>
     </div>
     <div class="metric-card">
-        <div class="metric-label">p95 Latency</div>
+        <div class="metric-label">{label_p95}</div>
         <div class="metric-val" style="color: var(--accent-amber);">{p95_lat:.2f} <span class="metric-unit">ms</span></div>
     </div>
     <div class="metric-card">
-        <div class="metric-label">p99 Latency (Tail)</div>
+        <div class="metric-label">{label_p99}</div>
         <div class="metric-val" style="color: var(--accent-red);">{p99_lat:.2f} <span class="metric-unit">ms</span></div>
     </div>
     <div class="metric-card">
@@ -815,8 +1101,8 @@ class MonitorNode(Node):
         <div class="metric-val" style="color: var(--accent-teal);">{freq_hz:.1f} <span class="metric-unit">Hz</span></div>
     </div>
     <div class="metric-card">
-        <div class="metric-label">Total Sampel / Gaps</div>
-        <div class="metric-val">{total_samples:,} <span class="metric-unit">/ {total_gaps} drop</span></div>
+        <div class="metric-label">{label_drop_desc}</div>
+        <div class="metric-val">{label_samples_drop}</div>
     </div>
 </div>
 
@@ -829,8 +1115,8 @@ class MonitorNode(Node):
 
 <div class="charts-grid">
     <div class="chart-box">
-        <h3>(a) Latensi Operasional: Rata-rata & Puncak (Avg vs Max)</h3>
-        <p>Menunjukkan latensi tipikal (Avg) vs lonjakan tertinggi (Max) per detik.</p>
+        <h3>{chart_a_title}</h3>
+        <p>{chart_a_desc}</p>
         <div class="chart-canvas-container">
             <canvas id="chartAvgMax"></canvas>
         </div>
@@ -853,8 +1139,8 @@ class MonitorNode(Node):
     </div>
 
     <div class="chart-box">
-        <h3>(d) Clock Skew & Stabilitas Jitter (ms)</h3>
-        <p>Latensi sampel vs garis 0 ms (Clock Sync) & Fluktuasi Jitter StdDev σ (ms).</p>
+        <h3>{chart_d_title}</h3>
+        <p>{chart_d_desc}</p>
         <div class="chart-canvas-container">
             <canvas id="chartJitter"></canvas>
         </div>

@@ -1,173 +1,201 @@
-# SOP Lengkap Prosedur Pengujian & Pelaporan ROS 2 — BRONE v2
+# 🚀 SOP & PERINTAH MONITORING BENCHMARK V4 (ISOLASI TERMINAL & QOS MATCHING)
+## Robot Humanoid BRONE — ROS 2 Humble (Ubuntu 22.04 LTS)
 
-Dokumen ini berisi alur kerja terpadu dari persiapan, eksekusi pengujian 4 skenario, hingga pembuatan laporan grafik visual otomatis untuk robot BRONE.
+Dokumen ini berisi panduan alur kerja terpadu dari persiapan, eksekusi pengujian 4 skenario, hingga pembuatan laporan grafik visual untuk robot BRONE menggunakan **Prinsip Isolasi Terminal (Zero-Touch System)**.
 
 ---
 
-## 🛠️ FASE 0: Persiapan & Sinkronisasi File
+## 📌 FASE 0: PRE-FLIGHT CHECKLIST & PRINSIP ISOLASI TERMINAL
 
-### 1. Sinkronkan File Terbaru ke NUC & JETSON
-Jalankan dari Windows CMD:
-```cmd
-cd "C:\Users\Patarajah\Documents\IDE Antigravity\ros2_network_monitor"
+> [!IMPORTANT]
+> **PRINSIP ISOLASI TERMINAL (ZERO-TOUCH SYSTEM):**
+> * File `~/.bashrc` di NUC dan JETSON **TETAP MENGGUNAKAN FASTRTPS (`rmw_fastrtps_cpp`)** bawaan standar agar seluruh program robot seperti `op3_manager`, `gaze_node`, dan servo Dynamixel di NUC aman 100%.
+> * Perintah `export` di terminal pengujian **HANYA BERLAKU SEMENTARA DI TERMINAL TERSEBUT** dan tidak merusak/mengubah sistem global.
 
-REM Kirim ke NUC
-scp dummy_publisher.py network_monitor.py network_monitor_gui.py dashboard.html plot_report.py brone-ub@10.101.143.111:~/ros2_network_monitor/
-
-REM Kirim ke JETSON
-scp dummy_publisher.py network_monitor.py network_monitor_gui.py dashboard.html plot_report.py brone@10.101.143.169:~/ros2_network_monitor/
-```
-
-### 2. Verifikasi Environment (Sudah Terkonfigurasi Permanen ✅)
-Kedua mesin (**NUC** & **JETSON**) sudah terkonfigurasi permanen di `~/.bashrc`. Cukup pastikan dengan perintah verifikasi cepat ini:
+### 1. Verifikasi Environment Utama:
+Di NUC (`192.168.100.1`) dan JETSON (`192.168.100.2`), pastikan environment default:
 ```bash
+source ~/.bashrc
 echo "RMW: $RMW_IMPLEMENTATION | DOMAIN_ID: $ROS_DOMAIN_ID"
 ```
-👉 *Output yang diharapkan:* **`RMW: rmw_cyclonedds_cpp | DOMAIN_ID: 30`**
+👉 *Output standar:* **`RMW: rmw_fastrtps_cpp | DOMAIN_ID: 30`**
 
-*(Catatan: Jika mengonfigurasi mesin baru dari nol di masa depan, tambahkan `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` dan `export ROS_DOMAIN_ID=30` ke `~/.bashrc`).*
+### 2. Reset Daemon (Jika CLI Tersangkut):
+```bash
+ros2 daemon stop
+ros2 daemon start
+```
 
 ---
 
-## 🚀 FASE 1: Eksekusi Pengujian (Pilih Skenario)
+## ⏰ FASE 1: SINKRONISASI WAKTU (MENCEGAH CLOCK SKEW LINTAS MESIN)
 
-Tersedia **2 Metode Pengujian**:
-- **Metode A (Web GUI Dashboard — Recommended):** Visualisasi live di browser laptop, **⏱️ Kontrol Sesi & Timer Otomatis**, fitur **📌 Penanda Event (Garis Vertikal)**, dan tombol **Download Langsung ke Laptop**.
-- **Metode B (CLI Batch Runner):** Berjalan otomatis N sampel via terminal, berhenti sendiri, dan mencatat log CSV.
+Wajib dijalankan sebelum pengujian lintas mesin (`nuc2jetson` / `jetson2nuc`):
 
-> ⏱️ **Fitur Baru: Kontrol Sesi & Timer Pengujian Otomatis**
-> 1. Saat pertama kali program monitor dibuka, sistem berada pada status **`⏸️ STANDBY (SIAP)`** dan grafik belum merekam data kotor (*warm-up*).
-> 2. Pilih durasi pengujian pada dropdown: **`30s`**, **`60s (Default)`**, **`120s`**, **`300s`**, atau **`Manual`**.
-> 3. Klik tombol **`[ ▶️ Mulai Monitoring ]`**.
-> 4. Sistem akan merekam data secara bersih detik demi detik dengan progress bar dan countdown waktu (`⏳ 00:42 / 01:00`).
-> 5. Begitu waktu habis, sistem otomatis **`✅ SELESAI (DATA TERKUNCI)`**, menghentikan perekaman, dan data siap diunduh!
-
-> 💡 **Fitur Baru: 📌 Event Marker / Garis Vertikal Penanda Perintah**
-> * **Via Browser Laptop:** Saat pengujian sedang berjalan (`🔴 RECORDING`), ketik catatan pada kotak input (misal: `Mulai YOLO`, `Perintah Wave`, `Beban CUDA Aktif`) lalu klik **`+ Tandai Event`**.
-> * **Via CLI Robot:** Jika ada node atau operator yang mem-publish ke topik `/brone/command` (misal: `init`, `wave`, `talk`), sistem otomatis mencatat garis vertikal pada detik yang tepat.
-> * Garis vertikal ini akan otomatis tergambar pada grafik laporan akhir untuk membuktikan dampak beban kerja terhadap latensi!
-
-> 💾 **Penyimpanan Bebas Beban (Direct Download ke Laptop):**
-> * Klik tombol **"Download CSV"** untuk mengunduh tabel time-series murni ke Excel/Sheets.
-> * Klik tombol **"Download Visual Report"** untuk mengunduh laporan interaktif HTML lengkap dengan seluruh grafik dan tombol **"🖨️ Cetak / Simpan PDF"**.
-> * File langsung tersimpan di folder `Downloads` laptop Anda tanpa membebani media penyimpanan NUC/Jetson.
+### Metode Chrony (Presisi Tinggi):
+* **Di Terminal NUC (Master Clock `192.168.100.1`):**
+  ```bash
+  sudo systemctl restart chrony
+  ```
+* **Di Terminal JETSON (Client Clock `192.168.100.2`):**
+  ```bash
+  sudo chronyd -q 'server 192.168.100.1 iburst'
+  chronyc tracking
+  ```
+  *(Pastikan selisih `System time` < 0.1 ms).*
 
 ---
 
-### Skenario 1: Uji Baseline NUC Internal (`nuc2nuc`)
+## 🚀 FASE 2: EKSEKUSI PENGUJIAN 4 TOPOLOGI
 
-**Terminal 1 NUC (Publisher):**
-```bash
-ssh brone-ub@10.101.143.111
-source /opt/ros/jazzy/setup.bash
-unset CYCLONEDDS_URI
-cd ~/ros2_network_monitor
-
-python3 dummy_publisher.py --topology nuc2nuc --samples 0
-```
-
-**Terminal 2 NUC (Web GUI Monitor):**
-```bash
-ssh -L 8765:127.0.0.1:8765 brone-ub@10.101.143.111
-source /opt/ros/jazzy/setup.bash
-unset CYCLONEDDS_URI
-cd ~/ros2_network_monitor
-
-python3 network_monitor_gui.py --ros-args -p topology:=nuc2nuc
-```
-👉 *Buka Browser di Laptop: `http://10.101.143.111:8765` (atau `http://localhost:8765`). Klik **"Download CSV"** kapan saja untuk menyimpan data.*
-
-*(Atau Metode CLI Auto-CSV: `python3 network_monitor.py --topology nuc2nuc --samples 1000`)*
+> ⏱️ **Fitur Web GUI Dashboard v2.0 (Port 8765):**
+> * Visualisasi live di browser laptop (`http://<IP_MESIN>:8765`).
+> * **State Machine Kontrol Sesi:** Status awal `STANDBY (IDLE)`. Indikator `🟢 Connected` otomatis menyala saat Publisher & Subscriber aktif.
+> * Klik **`[ ▶️ Start Session ]`** untuk mulai merekam data bersih.
 
 ---
 
-### Skenario 2: Uji Baseline JETSON Internal (`jetson2jetson`)
-*(Berlaku untuk Jetson Visi BRONE maupun Jetson Omniwheel mandiri. Pengujian intra-host 1 CPU ini 100% bebas dari clock skew).*
+### 🟢 Skenario 1: Baseline NUC Internal (`nuc2nuc` — Shared Memory)
 
-**Terminal 1 JETSON (Publisher):**
-```bash
-ssh brone@10.101.143.169
-source /opt/ros/humble/setup.bash
-unset CYCLONEDDS_URI
-cd ~/ros2_network_monitor
-
-python3 dummy_publisher.py --topology jetson2jetson --samples 0
-```
-
-**Terminal 2 JETSON (Web GUI Monitor):**
-```bash
-ssh -L 8765:127.0.0.1:8765 brone@10.101.143.169
-source /opt/ros/humble/setup.bash
-unset CYCLONEDDS_URI
-cd ~/ros2_network_monitor
-
-python3 network_monitor_gui.py --ros-args -p topology:=jetson2jetson
-```
-👉 *Buka Browser di Laptop: `http://10.101.143.169:8765` (atau `http://localhost:8765`).*
-
-*(Atau Metode CLI Auto-CSV: `python3 network_monitor.py --topology jetson2jetson --samples 1000`)*
+* **Terminal 1 NUC (Publisher):**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 dummy_publisher.py --topology nuc2nuc --freq 125 --payload 128 --samples 0
+  ```
+* **Terminal 2 NUC (Web GUI Monitor):**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p topology:=nuc2nuc
+  ```
+👉 *Buka Browser Laptop: `http://10.101.143.111:8765/` (atau `http://localhost:8765`).*
 
 ---
 
-### Skenario 3: Uji Lintas Mesin (JETSON ➔ NUC)
+### 🟢 Skenario 2: Baseline JETSON Internal (`jetson2jetson` — CycloneDDS Terminal Isolation)
 
-> 💡 **PENTING (Jika Sebelumnya Habis Uji Lokal / Habis `unset`):**
-> Jika terminal sebelumnya sempat menjalankan `unset CYCLONEDDS_URI`, baris `source ~/.bashrc` dan `export CYCLONEDDS_URI=...` di bawah akan **otomatis me-reset lingkungan kembali ke mode komunikasi antar-mesin**.
+> [!NOTE]
+> Khusus skenario `jetson2jetson`, tambahkan `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` **HANYA di Terminal 1 & 2 Jetson** untuk menghindari bug *multicast discovery lock* FastDDS di kernel ARM64 Jetson.
 
-**Terminal 1 JETSON (Publisher):**
-```bash
-ssh brone@10.101.143.169
-source ~/.bashrc
-source /opt/ros/humble/setup.bash
-cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file:///home/brone/ros2_network_monitor/cyclonedds_jetson.xml
-
-python3 dummy_publisher.py --topology jetson2nuc --samples 0
-```
-
-**Terminal 2 NUC (Web GUI Monitor):**
-```bash
-ssh -L 8765:127.0.0.1:8765 brone-ub@10.101.143.111
-source ~/.bashrc
-source /opt/ros/jazzy/setup.bash
-cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file:///home/brone-ub/ros2_network_monitor/cyclonedds_nuc.xml
-
-python3 network_monitor_gui.py --ros-args -p topology:=jetson2nuc
-```
-👉 *Buka Browser: `http://10.101.143.111:8765`.*
-
-*(Atau Metode CLI Auto-CSV di NUC: `python3 network_monitor.py --topology jetson2nuc --samples 1000`)*
+* **Terminal 1 JETSON (Publisher):**
+  ```bash
+  source /opt/ros/humble/setup.bash
+  export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+  cd ~/ros2_network_monitor
+  python3 dummy_publisher.py --topology jetson2jetson --freq 125 --payload 128 --samples 0
+  ```
+* **Terminal 2 JETSON (Web GUI Monitor):**
+  ```bash
+  source /opt/ros/humble/setup.bash
+  export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p topology:=jetson2jetson
+  ```
+👉 *Buka Browser Laptop: `http://10.101.143.169:8765` (atau `http://localhost:8765`).*
 
 ---
 
-### Skenario 4: Uji Lintas Mesin (NUC ➔ JETSON)
+### 🟢 Skenario 3: Uji Lintas Mesin (NUC ➔ JETSON via LAN Direct)
 
-**Terminal 1 NUC (Publisher):**
+* **Terminal 1 NUC (Publisher):**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 dummy_publisher.py --topology nuc2jetson --freq 125 --payload 128 --samples 0
+  ```
+* **Terminal 2 JETSON (Web GUI Monitor):**
+  ```bash
+  source /opt/ros/humble/setup.bash
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p topology:=nuc2jetson
+  ```
+
+---
+
+### 🟢 Skenario 4: Uji Lintas Mesin (JETSON ➔ NUC via LAN Direct)
+
+* **Terminal 1 JETSON (Publisher):**
+  ```bash
+  source /opt/ros/humble/setup.bash
+  cd ~/ros2_network_monitor
+  python3 dummy_publisher.py --topology jetson2nuc --freq 30 --payload 600000 --samples 0
+  ```
+* **Terminal 2 NUC (Web GUI Monitor):**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p topology:=jetson2nuc
+  ```
+
+---
+
+## 🩺 FASE 2.5: MODE INSPEKTUR KESEHATAN SISTEM & JITTER DATA NYATA (PASSIVE MODE)
+
+> [!TIP]
+> **Kapan Menggunakan Passive Mode?**
+> Gunakan mode ini saat robot BRONE sedang beroperasi aktif (menjalankan `op3_manager`, `brone_talk.py`, atau pelacakan wajah `gaze_node`). Node monitor akan mengendus (*sniffing*) topik nyata tanpa menyuntikkan paket buatan, menghitung interval kedatangan data antar-frame ($\Delta t$), mendeteksi *deadline overrun*, dan memantau suhu/beban CPU secara non-intrusif (100% bebas dari clock skew).
+
+### 🟢 1. Menginspeksi Loop Sensor IMU OpenCR (125 Hz — Deadline Budget 8.0 ms)
+* **Jalankan di NUC:**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/robotis/open_cr/imu -p target_hz:=125.0
+  ```
+👉 *Buka Browser: `http://192.168.100.1:8765` (atau via IP laptop penguji).*
+
+### 🟢 2. Menginspeksi Feedback Sudut Sendi / Joint States (50 Hz — Deadline Budget 20.0 ms)
+* **Jalankan di NUC:**
+  ```bash
+  source /opt/ros/jazzy/setup.bash
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/robotis/present_joint_states -p target_hz:=50.0
+  ```
+
+### 🟢 3. Menginspeksi Aliran Citra Visi / Kamera Jetson (30 Hz — Deadline Budget 33.3 ms)
+* **Jalankan di NUC atau JETSON:**
+  ```bash
+  source ~/.bashrc
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/camera/image_raw -p target_hz:=30.0
+  ```
+
+### 📊 Indikator Traffic Light Kesehatan pada Dashboard:
+| Status Badge | Kriteria Evaluasi Otomatis | Arti Operasional |
+| :--- | :--- | :--- |
+| <span style="color:#15803d; font-weight:bold;">🟢 SISTEM NORMAL & STABIL</span> | Overrun $\le 2\%$, CPU $< 75\%$, Suhu $< 78^\circ\text{C}$, Hz $\approx$ target | Loop kontrol stabil presisi, aman untuk manuver dinamis. |
+| <span style="color:#b45309; font-weight:bold;">⚠️ WASPADA / TERDEGRADASI</span> | Overrun $2 - 10\%$, atau CPU $75 - 90\%$, atau Suhu $78 - 85^\circ\text{C}$ | Terjadi jitter akibat beban inferensi SLM/Visi; perhatikan lonjakan lag. |
+| <span style="color:#b91c1c; font-weight:bold;">🔴 KRITIS / OVERRUN TINGGI</span> | Overrun $> 10\%$, atau CPU $> 90\%$, atau Suhu $> 85^\circ\text{C}$ | Risiko frame drop tinggi; motor servo berpotensi tersendat (*jerky*). |
+
+---
+
+### 1. Inkompatibilitas QoS saat Mengintip Topik CLI
+Saat mengintip topik `/test_topic` via terminal CLI (`ros2 topic echo`), Publisher kita menggunakan QoS `best_effort`. Sertakan opsi `--qos-reliability best_effort`:
 ```bash
-ssh brone-ub@10.101.143.111
-
-source ~/.bashrc
-source /opt/ros/jazzy/setup.bash
-cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file:///home/brone-ub/ros2_network_monitor/cyclonedds_nuc.xml
-
-python3 dummy_publisher.py --topology nuc2jetson --samples 0
+ros2 topic echo /test_topic --qos-reliability best_effort
 ```
 
-**Terminal 2 JETSON (Web GUI Monitor):**
+### 2. Memeriksa Topik Langsung Tanpa Daemon
+Jika CLI ROS 2 terasa lambat atau tersangkut:
 ```bash
-ssh -L 8765:127.0.0.1:8765 brone@10.101.143.169
-source ~/.bashrc
-source /opt/ros/humble/setup.bash
-cd ~/ros2_network_monitor
-export CYCLONEDDS_URI=file:///home/brone/ros2_network_monitor/cyclonedds_jetson.xml
-
-python3 network_monitor_gui.py --ros-args -p topology:=nuc2jetson
+ros2 topic list --no-daemon
 ```
-👉 *Buka Browser: `http://10.101.143.169:8765`.*
 
-*(Atau Metode CLI Auto-CSV di Jetson: `python3 network_monitor.py --topology nuc2jetson --samples 1000`)*
+---
+
+## 💻 FASE 4: DIAGNOSTIK KEMAMPUAN HARDWARE & BEBAN MESIN
+
+* **Di Intel NUC (Master):**
+  ```bash
+  htop
+  watch -n 1 "sensors | grep -i core"
+  ```
+* **Di NVIDIA Jetson Orin Nano (Visi/Persepsi):**
+  ```bash
+  jtop
+  tegrastats
+  ```
 
 ---
 
@@ -183,16 +211,16 @@ Bertujuan mencari batas maksimal Hz yang bisa ditangani jaringan sebelum *miss r
 
 ```bash
 # Level 1: 100 Hz
-python3 dummy_publisher.py --topology nuc2nuc --freq 100 --payload 128 --samples 2000
-python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 128 --samples 2000
+python3 dummy_publisher.py --topology nuc2nuc --freq 100 --payload 128 --samples 0
+python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 128 --samples 0
 
 # Level 2: 500 Hz
-python3 dummy_publisher.py --topology nuc2nuc --freq 500 --payload 128 --samples 5000
-python3 network_monitor.py --topology nuc2nuc --freq 500 --payload 128 --samples 5000
+python3 dummy_publisher.py --topology nuc2nuc --freq 500 --payload 128 --samples 0
+python3 network_monitor.py --topology nuc2nuc --freq 500 --payload 128 --samples 0
 
 # Level 3: 1000 Hz (Extreme)
-python3 dummy_publisher.py --topology nuc2nuc --freq 1000 --payload 128 --samples 10000
-python3 network_monitor.py --topology nuc2nuc --freq 1000 --payload 128 --samples 10000
+python3 dummy_publisher.py --topology nuc2nuc --freq 1000 --payload 128 --samples 0
+python3 network_monitor.py --topology nuc2nuc --freq 1000 --payload 128 --samples 0
 ```
 
 ### B. Sweeping Payload (Kunci Frekuensi di 50 Hz)

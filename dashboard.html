@@ -259,6 +259,129 @@
             display: flex;
         }
 
+        /* Mode Badges */
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .mode-synthetic {
+            background: #eff6ff;
+            color: #2563eb;
+            border: 1px solid #bfdbfe;
+        }
+        .mode-passive {
+            background: #f0fdf4;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        /* Health Hero Banner (Passive Live Mode) */
+        .health-hero-banner {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 18px 22px;
+            box-shadow: var(--shadow-card);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .health-hero-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+
+        .health-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            border-radius: 24px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .health-healthy {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+        }
+        .health-degraded {
+            background: #fef3c7;
+            color: #b45309;
+            border: 1px solid #fde68a;
+        }
+        .health-critical {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+        }
+
+        .health-reasons-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .health-quick-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .health-quick-card {
+            background: #f8fafc;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .hq-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .hq-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .hq-val small {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .hq-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        @media (max-width: 900px) {
+            .health-quick-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
         /* Session Control & Timer Panel */
         .session-panel {
             background-color: var(--bg-secondary);
@@ -737,7 +860,10 @@
             </div>
         </div>
         <div class="header-right">
-            <span class="topic-name">/test_topic</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="mode-badge mode-synthetic" id="modeBadge">SYNTHETIC BENCHMARK</span>
+                <span class="topic-name" id="topicBadge">/test_topic</span>
+            </div>
             <div class="badges-container">
                 <a href="/api/export-csv" class="btn-download" id="btnDownload" download title="Unduh Catatan Pengujian CSV (Langsung ke Laptop)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -818,24 +944,56 @@
         </div>
     </div>
 
+    <!-- Robot Health Hero Banner (Passive Live Mode) -->
+    <div class="health-hero-banner" id="healthHeroBanner" style="display: none;">
+        <div class="health-hero-top">
+            <div class="health-status-badge health-healthy" id="heroHealthBadge">
+                <span id="heroHealthText">🟢 SISTEM NORMAL & STABIL</span>
+            </div>
+            <div class="health-reasons-text" id="heroHealthReasons">Loop sensor/motorik berjalan optimal tanpa frame drop.</div>
+        </div>
+        <div class="health-quick-grid">
+            <div class="health-quick-card">
+                <span class="hq-label">Target Frekuensi</span>
+                <span class="hq-val" id="hqTargetHz">125.0 <small>Hz</small></span>
+                <span class="hq-sub" id="hqTargetPeriod">Target Interval: 8.00 ms</span>
+            </div>
+            <div class="health-quick-card">
+                <span class="hq-label">Jeda Aktual (Δt)</span>
+                <span class="hq-val" id="hqCurrentDeltaT">0.00 <small>ms</small></span>
+                <span class="hq-sub" id="hqJitter">Jitter: ±0.00 ms</span>
+            </div>
+            <div class="health-quick-card">
+                <span class="hq-label">Deadline Overrun</span>
+                <span class="hq-val" id="hqOverrunRate">0.0 <small>%</small></span>
+                <span class="hq-sub" id="hqTotalOverruns">0 paket &gt; deadline</span>
+            </div>
+            <div class="health-quick-card">
+                <span class="hq-label">Beban & Suhu CPU</span>
+                <span class="hq-val" id="hqCpuTemp">0.0 <small>°C</small></span>
+                <span class="hq-sub" id="hqCpuPct">Load: 0.0%</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Metric Cards Grid (3 cols x 3 rows) -->
     <div class="metrics-grid">
         <div class="metric-card card-hz">
-            <div class="metric-label">Frekuensi</div>
+            <div class="metric-label" id="labelHz">Frekuensi</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valHz">0.0</span>
                 <span class="metric-unit">Hz</span>
             </div>
         </div>
         <div class="metric-card card-avg-lat">
-            <div class="metric-label">Avg Latency</div>
+            <div class="metric-label" id="labelAvgLat">Avg Latency</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valAvgLat">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card card-min-lat">
-            <div class="metric-label">Min Latency</div>
+            <div class="metric-label" id="labelMinLat">Min Latency</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valMinLat">0.00</span>
                 <span class="metric-unit">ms</span>
@@ -843,21 +1001,21 @@
         </div>
 
         <div class="metric-card card-max-lat">
-            <div class="metric-label">Max Latency</div>
+            <div class="metric-label" id="labelMaxLat">Max Latency</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valMaxLat">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card card-jitter">
-            <div class="metric-label">Jitter (StdDev)</div>
+            <div class="metric-label" id="labelJitter">Jitter (StdDev)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valJitter">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card card-total">
-            <div class="metric-label">Total Sampel</div>
+            <div class="metric-label" id="labelTotal">Total Sampel</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valTotal">0</span>
                 <span class="metric-unit">pesan</span>
@@ -865,21 +1023,21 @@
         </div>
 
         <div class="metric-card p95">
-            <div class="metric-label">p95 Latency</div>
+            <div class="metric-label" id="labelP95">p95 Latency</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valP95">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card p99">
-            <div class="metric-label">p99 Latency (Tail)</div>
+            <div class="metric-label" id="labelP99">p99 Latency (Tail)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valP99">0.00</span>
                 <span class="metric-unit">ms</span>
             </div>
         </div>
         <div class="metric-card miss-rate">
-            <div class="metric-label">Miss Rate (Drop)</div>
+            <div class="metric-label" id="labelMissRate">Miss Rate (Drop)</div>
             <div class="metric-value-container">
                 <span class="metric-value" id="valMissRate">0.00</span>
                 <span class="metric-unit">%</span>
@@ -1099,6 +1257,39 @@
     const valP99 = document.getElementById('valP99');
     const valMissRate = document.getElementById('valMissRate');
     
+    // Labels for Dynamic Naming
+    const labelHz = document.getElementById('labelHz');
+    const labelAvgLat = document.getElementById('labelAvgLat');
+    const labelMinLat = document.getElementById('labelMinLat');
+    const labelMaxLat = document.getElementById('labelMaxLat');
+    const labelJitter = document.getElementById('labelJitter');
+    const labelTotal = document.getElementById('labelTotal');
+    const labelP95 = document.getElementById('labelP95');
+    const labelP99 = document.getElementById('labelP99');
+    const labelMissRate = document.getElementById('labelMissRate');
+
+    // Telemetry Elements
+    const valPubCpuTemp = document.getElementById('valPubCpuTemp');
+    const valPubCpuPct = document.getElementById('valPubCpuPct');
+    const valSubCpuTemp = document.getElementById('valSubCpuTemp');
+    const valSubCpuPct = document.getElementById('valSubCpuPct');
+
+    // Health Hero Card Elements
+    const modeBadge = document.getElementById('modeBadge');
+    const topicBadge = document.getElementById('topicBadge');
+    const healthHeroBanner = document.getElementById('healthHeroBanner');
+    const heroHealthBadge = document.getElementById('heroHealthBadge');
+    const heroHealthText = document.getElementById('heroHealthText');
+    const heroHealthReasons = document.getElementById('heroHealthReasons');
+    const hqTargetHz = document.getElementById('hqTargetHz');
+    const hqTargetPeriod = document.getElementById('hqTargetPeriod');
+    const hqCurrentDeltaT = document.getElementById('hqCurrentDeltaT');
+    const hqJitter = document.getElementById('hqJitter');
+    const hqOverrunRate = document.getElementById('hqOverrunRate');
+    const hqTotalOverruns = document.getElementById('hqTotalOverruns');
+    const hqCpuTemp = document.getElementById('hqCpuTemp');
+    const hqCpuPct = document.getElementById('hqCpuPct');
+    
     const statusBadge = document.getElementById('statusBadge');
     const statusText = document.getElementById('statusText');
     const clockBanner = document.getElementById('clockSkewBanner');
@@ -1200,6 +1391,17 @@
                 fill: false,
                 tension: 0.2,
                 pointRadius: 0
+            },
+            {
+                label: 'Deadline Budget (ms)',
+                data: [],
+                borderColor: '#dc2626',
+                borderWidth: 2,
+                borderDash: [5, 4],
+                fill: false,
+                tension: 0,
+                pointRadius: 0,
+                hidden: true
             }
         ]},
         options: {
@@ -1426,6 +1628,115 @@
             }
             lastTotal = c.total;
 
+            // Mode & Dynamic UI Adaptation
+            const isPassive = (c.mode === 'passive');
+            if (isPassive) {
+                if (modeBadge) {
+                    modeBadge.className = 'mode-badge mode-passive';
+                    modeBadge.textContent = 'PASSIVE HEALTH INSPECTOR';
+                }
+                if (topicBadge) {
+                    topicBadge.textContent = c.topic_name || '/robotis/open_cr/imu';
+                }
+                if (healthHeroBanner) {
+                    healthHeroBanner.style.display = 'flex';
+                }
+
+                // Health status badge & reasons
+                const status = (c.health_status || 'HEALTHY').toUpperCase();
+                if (heroHealthBadge) {
+                    heroHealthBadge.className = 'health-status-badge ' +
+                        (status === 'HEALTHY' ? 'health-healthy' : (status === 'DEGRADED' ? 'health-degraded' : 'health-critical'));
+                }
+                if (heroHealthText) {
+                    if (status === 'HEALTHY') {
+                        heroHealthText.textContent = '🟢 SISTEM NORMAL & STABIL';
+                    } else if (status === 'DEGRADED') {
+                        heroHealthText.textContent = '⚠️ WASPADA / TERDEGRADASI';
+                    } else {
+                        heroHealthText.textContent = '🔴 KRITIS / OVERRUN TINGGI';
+                    }
+                }
+                if (heroHealthReasons) {
+                    if (c.health_reasons && c.health_reasons.length > 0) {
+                        heroHealthReasons.textContent = c.health_reasons.join(' • ');
+                    } else {
+                        heroHealthReasons.textContent = 'Loop sensor/motorik berjalan optimal tanpa frame drop.';
+                    }
+                }
+
+                // Quick stats
+                if (hqTargetHz) hqTargetHz.innerHTML = `${(c.target_hz || 0).toFixed(1)} <small>Hz</small>`;
+                if (hqTargetPeriod) hqTargetPeriod.textContent = `Target Interval: ${(c.target_period_ms || 0).toFixed(2)} ms`;
+                if (hqCurrentDeltaT) hqCurrentDeltaT.innerHTML = `${(c.current_delta_t_ms || c.avg_lat || 0).toFixed(2)} <small>ms</small>`;
+                if (hqJitter) hqJitter.textContent = `Jitter: ±${(c.current_jitter_ms || c.std_lat || 0).toFixed(2)} ms`;
+                if (hqOverrunRate) hqOverrunRate.innerHTML = `${(c.overrun_rate_percent || 0).toFixed(1)} <small>%</small>`;
+                const threshold = c.overrun_threshold_ms || c.target_period_ms || 8.0;
+                if (hqTotalOverruns) hqTotalOverruns.textContent = `${(c.total_overruns || 0).toLocaleString()} paket > ${threshold.toFixed(1)}ms`;
+                if (hqCpuTemp) hqCpuTemp.innerHTML = `${(c.sub_cpu_temp_c || 0).toFixed(1)} <small>°C</small>`;
+                if (hqCpuPct) hqCpuPct.textContent = `Load: ${(c.sub_cpu_pct || 0).toFixed(1)}%`;
+
+                // Metric card labels
+                if (labelHz) labelHz.textContent = 'Frekuensi Aktual';
+                if (labelAvgLat) labelAvgLat.textContent = 'Avg Interval (Δt)';
+                if (labelMinLat) labelMinLat.textContent = 'Min Interval (Δt)';
+                if (labelMaxLat) labelMaxLat.textContent = 'Max Interval (Δt)';
+                if (labelJitter) labelJitter.textContent = 'Jitter (Δt StdDev)';
+                if (labelTotal) labelTotal.textContent = 'Total Sampel Terpantau';
+                if (labelP95) labelP95.textContent = 'p95 Interval';
+                if (labelP99) labelP99.textContent = 'p99 Interval (Tail)';
+                if (labelMissRate) labelMissRate.textContent = 'Deadline Overrun Rate';
+
+                // Chart Latency: update labels & deadline budget line
+                chartLatency.data.datasets[0].label = 'Avg Interval Δt (ms)';
+                chartLatency.data.datasets[1].label = 'Max Interval Δt (ms)';
+                if (chartLatency.data.datasets[2]) {
+                    chartLatency.data.datasets[2].hidden = false;
+                    chartLatency.data.datasets[2].label = `Deadline Budget (${threshold.toFixed(1)} ms)`;
+                    chartLatency.data.datasets[2].data = h.map(() => threshold);
+                }
+                chartLatency.options.scales.y.title.text = 'Jeda Kedatangan Δt (ms)';
+
+                // Chart Skew: in passive mode, single-host receiver timing has no clock skew!
+                chartSkew.data.datasets[0].label = 'Inter-arrival Δt (ms)';
+                chartSkew.options.scales.y.title.text = 'Jeda Δt & Jitter (ms)';
+            } else {
+                if (modeBadge) {
+                    modeBadge.className = 'mode-badge mode-synthetic';
+                    modeBadge.textContent = 'SYNTHETIC BENCHMARK';
+                }
+                if (topicBadge) {
+                    topicBadge.textContent = c.topic_name || '/robotis/net_benchmark';
+                }
+                if (healthHeroBanner) {
+                    healthHeroBanner.style.display = 'none';
+                }
+
+                // Restore synthetic labels
+                if (labelHz) labelHz.textContent = 'Frekuensi';
+                if (labelAvgLat) labelAvgLat.textContent = 'Avg Latency';
+                if (labelMinLat) labelMinLat.textContent = 'Min Latency';
+                if (labelMaxLat) labelMaxLat.textContent = 'Max Latency';
+                if (labelJitter) labelJitter.textContent = 'Jitter (StdDev)';
+                if (labelTotal) labelTotal.textContent = 'Total Sampel';
+                if (labelP95) labelP95.textContent = 'p95 Latency';
+                if (labelP99) labelP99.textContent = 'p99 Latency (Tail)';
+                if (labelMissRate) labelMissRate.textContent = 'Miss Rate (Drop)';
+
+                // Chart Latency: synthetic datasets
+                chartLatency.data.datasets[0].label = 'Avg Latency (ms)';
+                chartLatency.data.datasets[1].label = 'Max Latency (ms)';
+                if (chartLatency.data.datasets[2]) {
+                    chartLatency.data.datasets[2].hidden = true;
+                    chartLatency.data.datasets[2].data = [];
+                }
+                chartLatency.options.scales.y.title.text = 'Latensi Operasional (ms)';
+
+                // Chart Skew: synthetic datasets
+                chartSkew.data.datasets[0].label = 'Latensi Terukur (Clock Skew, ms)';
+                chartSkew.options.scales.y.title.text = 'Latensi & Jitter (ms)';
+            }
+
             // Metrics Update
             valHz.textContent = (c.hz || 0).toFixed(1);
             valAvgLat.textContent = (c.avg_lat || 0).toFixed(2);
@@ -1442,7 +1753,7 @@
             valSubCpuPct.textContent = (c.sub_cpu_pct || 0).toFixed(1);
 
             // Clock Skew Warning
-            if (c.clock_skew || c.negative_count > 0) {
+            if (!isPassive && (c.clock_skew || c.negative_count > 0)) {
                 clockBanner.classList.add('show');
                 negCount.textContent = c.negative_count;
             } else {
