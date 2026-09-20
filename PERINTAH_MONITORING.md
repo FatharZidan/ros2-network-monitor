@@ -26,6 +26,16 @@ ros2 daemon stop
 ros2 daemon start
 ```
 
+### 3. Prosedur Sinkronisasi & Update Repository via Git:
+Jalankan di NUC maupun JETSON jika ada pembaruan kode di GitHub agar terhindar dari *pathspec mismatch*:
+```bash
+cd ~/ros2_network_monitor
+git fetch origin
+git checkout feature/live-data-monitor
+git pull origin feature/live-data-monitor
+```
+👉 *Verifikasi dengan `git status` (harus tertulis `On branch feature/live-data-monitor`).*
+
 ---
 
 ## ⏰ FASE 1: SINKRONISASI WAKTU (MENCEGAH CLOCK SKEW LINTAS MESIN)
@@ -161,6 +171,30 @@ Wajib dijalankan sebelum pengujian lintas mesin (`nuc2jetson` / `jetson2nuc`):
   python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/camera/image_raw -p target_hz:=30.0
   ```
 
+### 🟢 4. Menginspeksi Perintah Gerak & Navigasi Robot (`/cmd_vel` atau `/robotis/walking/command`)
+* **Jalankan di NUC (atau Jetson):**
+  ```bash
+  source ~/.bashrc
+  cd ~/ros2_network_monitor
+  python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/cmd_vel -p target_hz:=10.0
+  ```
+
+### 🛠️ 5. Toolkit Probing & Penemuan Topik Nyata di Robot:
+Gunakan perintah diagnostik ini sebelum menjalankan passive mode untuk mengetahui topik yang sedang aktif broadcast:
+```bash
+# A. Melihat daftar seluruh topik yang aktif di robot:
+ros2 topic list
+
+# B. Mengukur laju frekuensi (Hz) publikasi aktual topik target:
+ros2 topic hz /robotis/open_cr/imu
+
+# C. Mengetahui tipe pesan (Message Type) dari topik:
+ros2 topic type /robotis/open_cr/imu
+
+# D. Memeriksa QoS profile (Reliability & History) publisher aktif:
+ros2 topic info -v /robotis/open_cr/imu
+```
+
 ### 📊 Indikator Traffic Light Kesehatan pada Dashboard:
 | Status Badge | Kriteria Evaluasi Otomatis | Arti Operasional |
 | :--- | :--- | :--- |
@@ -170,17 +204,44 @@ Wajib dijalankan sebelum pengujian lintas mesin (`nuc2jetson` / `jetson2nuc`):
 
 ---
 
-### 1. Inkompatibilitas QoS saat Mengintip Topik CLI
+## 🔧 FASE 2.8: TROUBLESHOOTING OPERASIONAL & MANAJEMEN PORT
+
+### 1. Mengatasi Port Web Server (8765) Bentrok / Tertahan:
+Jika saat menjalankan monitor muncul error `[Errno 98] Address already in use`:
+```bash
+# Solusi A: Matikan proses zombie yang masih mengunci port 8765
+fuser -k 8765/tcp
+
+# Solusi B: Jalankan monitor pada port alternatif (misal: 8766)
+python3 network_monitor_gui.py --ros-args -p mode:=passive -p topic_name:=/robotis/open_cr/imu -p http_port:=8766
+```
+
+### 2. Inkompatibilitas QoS saat Mengintip Topik CLI
 Saat mengintip topik `/test_topic` via terminal CLI (`ros2 topic echo`), Publisher kita menggunakan QoS `best_effort`. Sertakan opsi `--qos-reliability best_effort`:
 ```bash
 ros2 topic echo /test_topic --qos-reliability best_effort
 ```
 
-### 2. Memeriksa Topik Langsung Tanpa Daemon
+### 3. Memeriksa Topik Langsung Tanpa Daemon
 Jika CLI ROS 2 terasa lambat atau tersangkut:
 ```bash
 ros2 topic list --no-daemon
 ```
+
+### 4. Verifikasi Konektivitas Fisik & Service di Jetson / NUC:
+* **Uji Ping Fisik Kabel LAN Cat6 (Direct Point-to-Point):**
+  ```bash
+  ping -c 3 192.168.100.2  # Dari NUC ke Jetson
+  ping -c 3 192.168.100.1  # Dari Jetson ke NUC
+  ```
+* **Uji Port Broker MQTT Mosquitto di Jetson (Port 1883):**
+  ```bash
+  nc -zv 192.168.100.2 1883
+  ```
+* **Cek Service Otomatis BRONE di Jetson:**
+  ```bash
+  systemctl status brone_jetson_manager.service expression-display.service
+  ```
 
 ---
 
@@ -251,27 +312,30 @@ python3 network_monitor.py --topology nuc2nuc --freq 100 --payload 256 --samples
 ```
 ---
 
-## 📊 FASE 3: Pembuatan Grafik & Laporan Otomatis
+## 📊 FASE 3: Pembuatan Grafik & Laporan Otomatis (Dual-Mode Generator)
 
-Setelah pengujian menghasilkan file `brone_log_*.csv`, buat laporan visual time-series lengkap dengan tool `plot_report.py`.
+Tool `plot_report.py` secara otomatis mendukung **kedua format log** (`brone_log_*.csv` untuk benchmark sintetik dan `brone_health_*.csv` untuk inspeksi topik nyata).
 
 ### 1. Eksekusi Generator Laporan (di Laptop atau NUC/Jetson)
 ```bash
-# Memproses file CSV log terbaru:
+# A. Otomatis mencari dan membandingkan seluruh file log di folder saat ini:
 python3 plot_report.py
 
-# Atau memproses file CSV tertentu:
-python3 plot_report.py brone_log_jetson2nuc_50hz_128b_best_effort_20260826_201015.csv
+# B. Memproses file log kesehatan topik tertentu:
+python3 plot_report.py brone_health_robotis_open_cr_imu_125hz_*.csv
+
+# C. Membandingkan performa antar topik / skenario sekaligus (Multi-Run Comparison):
+python3 plot_report.py brone_health_*.csv brone_log_*.csv
 ```
 
 ### 2. Output yang Dihasilkan:
-1. 📑 **`<nama_file_log>_report.html` (Laporan Interaktif Light Mode):**
-   - Kartu Metrik Latensi (Avg, Min, Max, p95, p99), Throughput Hz, Total Sampel, & Miss Rate.
-   - Daftar Event Marker yang ditandai selama pengujian.
-   - Grafik Fluktuasi Latensi Kontinu (Avg, p95, p99, Min-Max Jitter Shading).
-   - Grafik Kestabilan Throughput Frekuensi (Hz).
-   - Tombol **"🖨️ Cetak / Simpan PDF"** siap untuk lampiran dokumen resmi skripsi.
-2. 🖼️ **`<nama_file_log>_plot.png`:** Grafik resolusi tinggi (300 DPI Light Mode) dengan 3 subplot bertumpuk dan garis vertikal penanda event.
+1. 📑 **`brone_report_<timestamp>.html` (Laporan Interaktif Mandiri):**
+   - Ringkasan Kartu Metrik Latensi / Inter-Arrival $\Delta t$ (Avg, p95, p99, Min/Max), Throughput Hz, Jitter ($\sigma$), & Persentase Overrun / Drop.
+   - Tabel Perbandingan Multi-Skenario dengan badge penanda otomatis (*PASSIVE* vs *SYNTHETIC*).
+   - Grafik Bar Komparasi Multi-Pengujian (Avg, p95, p99, Throughput Hz).
+   - Grafik Runtun Waktu (*Time Series History*) 1 detik per detik.
+   - Tombol **"🖨️ Cetak / Simpan PDF"** siap cetak untuk lampiran laporan resmi / paper skripsi.
+2. 🖼️ **`brone_report_<timestamp>.png`:** Grafik resolusi tinggi (300 DPI) jika paket `matplotlib` terinstal.
 
 ---
 
