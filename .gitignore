@@ -14,3 +14,9 @@ __pycache__/
 
 # System & Logs
 *.log
+
+# Generated Benchmark & Health Inspection Logs/Reports
+brone_*.csv
+brone_report_*.html
+brone_report_*.png
+baseline_*.txt
