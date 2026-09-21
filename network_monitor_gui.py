@@ -335,6 +335,20 @@ class MonitorNode(Node):
         except Exception:
             pass
 
+        COMMON_TOPIC_TYPES = {
+            '/robotis/open_cr/imu': 'sensor_msgs/msg/Imu',
+            '/robotis/present_joint_states': 'sensor_msgs/msg/JointState',
+            '/robotis/goal_joint_states': 'sensor_msgs/msg/JointState',
+            '/cmd_vel': 'geometry_msgs/msg/Twist',
+            '/camera/image_raw': 'sensor_msgs/msg/Image',
+            '/brone/jetson_cmd': 'std_msgs/msg/String',
+            '/brone/command': 'std_msgs/msg/String',
+            '/brone/set_expression': 'std_msgs/msg/String',
+            '/brone/event_marker': 'std_msgs/msg/String',
+            '/robotis/walking/command': 'std_msgs/msg/String',
+            '/rosout': 'rcl_interfaces/msg/Log',
+        }
+
         msg_cls = None
         if self.topic_type_str:
             msg_cls = resolve_msg_type(self.topic_type_str)
@@ -342,6 +356,16 @@ class MonitorNode(Node):
                 self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_to_use)
                 self._sub_bound = True
                 self.get_logger().info(f"✅ Bound passive subscription with specified type: {self.topic_type_str}")
+                return
+
+        # Fast path: bind immediately if known standard topic
+        if topic_name in COMMON_TOPIC_TYPES:
+            known_type = COMMON_TOPIC_TYPES[topic_name]
+            msg_cls = resolve_msg_type(known_type)
+            if msg_cls:
+                self.create_subscription(msg_cls, topic_name, self._passive_listener_callback, qos_to_use)
+                self._sub_bound = True
+                self.get_logger().info(f"✅ Instantly bound standard topic {topic_name} with type: {known_type}")
                 return
 
         # Attempt auto-detection from ROS 2 graph
@@ -583,11 +607,6 @@ class MonitorNode(Node):
         self._last_msg_recv_time = now_ts
         self._live_feed_connected = True
 
-        if not self._is_recording:
-            with self._lock:
-                self._last_recv_ns = now_ns
-            return
-
         with self._lock:
             if self._last_recv_ns is not None:
                 delta_t_ms = (now_ns - self._last_recv_ns) / 1_000_000.0
@@ -600,9 +619,11 @@ class MonitorNode(Node):
                         self._total_overruns += 1
 
                     self._latencies.append(delta_t_ms)
-                    self._all_latencies.append(delta_t_ms)
                     self._msg_count += 1
-                    self._total_received += 1
+
+                    if self._is_recording:
+                        self._all_latencies.append(delta_t_ms)
+                        self._total_received += 1
 
             self._last_recv_ns = now_ns
 
@@ -610,24 +631,13 @@ class MonitorNode(Node):
         now = time.time()
         self._live_feed_connected = (now - self._last_msg_recv_time) < 2.0
         
-        # If IDLE or COMPLETED, maintain system health telemetry but skip recording stats
-        if not self._is_recording:
-            sys_health = get_system_health()
-            with self._lock:
-                self._current_stats['sub_cpu_temp_c'] = sys_health['cpu_temp_c']
-                self._current_stats['sub_gpu_temp_c'] = sys_health['gpu_temp_c']
-                self._current_stats['sub_cpu_pct'] = sys_health['cpu_pct']
-                self._current_stats['sub_ram_used_mb'] = sys_health['ram_used_mb']
-                self._current_stats['sub_ram_pct'] = sys_health['ram_pct']
-            return
-            
-        self._session_elapsed = int(now - self._session_start_time)
-        
-        # Auto-stop on timer expiration
-        if self._target_duration > 0 and self._session_elapsed >= self._target_duration:
-            self._is_recording = False
-            self._session_state = 'COMPLETED'
-            self.get_logger().info(f"✅ [BENCHMARK SELESAI] Target durasi {self._target_duration} detik tercapai!")
+        # Advance session timer only if recording is active
+        if self._is_recording:
+            self._session_elapsed = int(now - self._session_start_time)
+            if self._target_duration > 0 and self._session_elapsed >= self._target_duration:
+                self._is_recording = False
+                self._session_state = 'COMPLETED'
+                self.get_logger().info(f"✅ [BENCHMARK SELESAI] Target durasi {self._target_duration} detik tercapai!")
 
         with self._lock:
             elapsed = now - self._window_start
@@ -688,7 +698,9 @@ class MonitorNode(Node):
                 reasons.append(f"Jitter terdeteksi: {overrun_rate:.1f}% melampaui deadline {self.target_period_ms:.1f}ms")
                 
             if self.target_hz > 0:
-                if hz == 0.0:
+                if hz == 0.0 and self._total_received == 0:
+                    status = 'HEALTHY'  # Standby before data starts
+                elif hz == 0.0:
                     status = 'CRITICAL'
                     reasons.append(f"Tidak ada data masuk! (Target: {self.target_hz:.1f} Hz)")
                 else:
@@ -752,15 +764,22 @@ class MonitorNode(Node):
 
         with self._lock:
             self._current_stats = stats
-            self._history.append(stats)
+            if self._is_recording:
+                self._history.append(stats)
             
-        self.get_logger().info(
-            f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
-            f"Pub Suhu: {stats['pub_cpu_temp_c']}°C ({stats['pub_cpu_pct']}%) | Sub Suhu: {stats['sub_cpu_temp_c']}°C ({stats['sub_cpu_pct']}%)"
-        )
+        if self._is_recording:
+            self.get_logger().info(
+                f"[t={self._session_elapsed}s/{self._target_duration}s] Hz: {stats['hz']} | Avg: {stats['avg_lat']}ms | "
+                f"Pub Suhu: {stats['pub_cpu_temp_c']}°C ({stats['pub_cpu_pct']}%) | Sub Suhu: {stats['sub_cpu_temp_c']}°C ({stats['sub_cpu_pct']}%)"
+            )
 
     def get_api_data(self):
         with self._lock:
+            pub_count = 0
+            try:
+                pub_count = len(self.get_publishers_info_by_topic(self._topic_name))
+            except Exception:
+                pass
             remaining = max(0, self._target_duration - self._session_elapsed) if self._target_duration > 0 else 0
             return {
                 'session': {
@@ -770,6 +789,7 @@ class MonitorNode(Node):
                     'target_duration': self._target_duration,
                     'remaining': remaining,
                     'connected': self._live_feed_connected,
+                    'publisher_count': pub_count,
                 },
                 'current': self._current_stats,
                 'history': list(self._history),

@@ -224,6 +224,12 @@
             background: #fef2f2;
         }
 
+        .status-badge.warning {
+            color: #d97706;
+            border-color: #fde68a;
+            background: #fffbeb;
+        }
+
         .status-dot {
             width: 8px;
             height: 8px;
@@ -1619,9 +1625,14 @@
             }
 
             // Connection Badge (Publisher Active)
-            if (session.connected || (c.total > 0 && c.total !== lastTotal)) {
+            const pubCount = session.publisher_count || 0;
+            if (session.connected || (c.hz && c.hz > 0) || (c.total > 0 && c.total !== lastTotal)) {
                 statusBadge.className = 'status-badge online';
-                statusText.textContent = session.state === 'RUNNING' ? 'Merekam data…' : 'Publisher terhubung';
+                const hzStr = (c.hz && c.hz > 0) ? ` (${c.hz.toFixed(1)} Hz)` : '';
+                statusText.textContent = session.state === 'RUNNING' ? 'Merekam data…' : `Publisher terhubung${hzStr}`;
+            } else if (pubCount > 0) {
+                statusBadge.className = 'status-badge warning';
+                statusText.textContent = `Publisher aktif (${pubCount} node), menunggu aliran data…`;
             } else {
                 statusBadge.className = 'status-badge offline';
                 statusText.textContent = session.state === 'RUNNING' ? 'Tidak ada data baru' : 'Menunggu publisher…';
