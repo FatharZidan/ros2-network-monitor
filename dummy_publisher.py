@@ -26,12 +26,33 @@ def get_timestamp_ns(topology: str):
 
 _last_cpu_idle = 0.0
 _last_cpu_total = 0.0
+_fast_pub_cpu_samples = []
+
+
+def sample_fast_pub_cpu() -> None:
+    """Lightweight 200ms (5 Hz) sampler on Publisher to capture transient CPU spikes."""
+    global _last_cpu_idle, _last_cpu_total
+    try:
+        if os.path.exists("/proc/stat"):
+            with open("/proc/stat", "r") as f:
+                first_line = f.readline()
+            fields = [float(x) for x in first_line.split()[1:]]
+            if len(fields) >= 5:
+                idle = fields[3] + fields[4]
+                total = sum(fields)
+                idle_delta = idle - _last_cpu_idle
+                total_delta = total - _last_cpu_total
+                _last_cpu_idle = idle
+                _last_cpu_total = total
+                if total_delta > 0:
+                    pct = round(max(0.0, min(100.0, (1.0 - idle_delta / total_delta) * 100.0)), 1)
+                    _fast_pub_cpu_samples.append(pct)
+    except Exception:
+        pass
 
 
 def get_system_health() -> dict:
     """Read Linux system thermal, CPU, and RAM metrics without external dependencies."""
-    global _last_cpu_idle, _last_cpu_total
-    
     cpu_temp = 0.0
     gpu_temp = 0.0
     cpu_pct = 0.0
@@ -71,24 +92,10 @@ def get_system_health() -> dict:
     except Exception:
         pass
 
-    try:
-        if os.path.exists("/proc/stat"):
-            with open("/proc/stat", "r") as f:
-                first_line = f.readline()
-            fields = [float(x) for x in first_line.split()[1:]]
-            if len(fields) >= 5:
-                idle = fields[3] + fields[4]
-                total = sum(fields)
-                
-                idle_delta = idle - _last_cpu_idle
-                total_delta = total - _last_cpu_total
-                _last_cpu_idle = idle
-                _last_cpu_total = total
-                
-                if total_delta > 0:
-                    cpu_pct = round((1.0 - idle_delta / total_delta) * 100.0, 1)
-    except Exception:
-        pass
+    sample_fast_pub_cpu()
+    if _fast_pub_cpu_samples:
+        cpu_pct = max(_fast_pub_cpu_samples)
+        _fast_pub_cpu_samples.clear()
 
     try:
         if os.path.exists("/proc/meminfo"):
@@ -128,8 +135,10 @@ class DummyPublisher(Node):
         
         self.ts_func = get_timestamp_ns(self.args.topology)
         
-        # Cache health to update every 1 second (zero overhead during high-frequency publish)
+        # Cache health to update every 1 second, with 200ms fast CPU spike sampling
+        sample_fast_pub_cpu()
         self._cached_health = get_system_health()
+        self.create_timer(0.2, sample_fast_pub_cpu)
         self.create_timer(1.0, self._update_health_cache)
         
         qos_map = {

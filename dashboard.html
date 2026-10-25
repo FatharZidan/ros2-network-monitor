@@ -506,6 +506,39 @@
         .card-gpu-temp::before { background: #dc2626; }
         .card-cpu-pct::before { background: #2563eb; }
         .card-ram-pct::before { background: #7c3aed; }
+        .card-ram-mb::before { background: #0891b2; }
+        .card-subteam::before { background: #059669; }
+
+        .metric-subtext {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .subteam-pills {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 2px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+        }
+
+        .subteam-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .subteam-tag {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
 
         .metric-label {
             font-size: 11px;
@@ -899,6 +932,9 @@
                 <span class="metric-value" id="valPubCpuPct">0.0</span>
                 <span class="metric-unit">%</span>
             </div>
+            <div class="metric-subtext">
+                RAM Publisher: <strong id="valPubRamPct">0.0</strong>% • GPU Suhu: <strong id="valPubGpuTemp">0.0</strong>°C
+            </div>
         </div>
 
         <div class="metric-card card-gpu-temp">
@@ -913,6 +949,34 @@
             <div class="metric-value-container">
                 <span class="metric-value" id="valSubCpuPct">0.0</span>
                 <span class="metric-unit">%</span>
+            </div>
+            <div class="metric-subtext">
+                Peak (200ms): <strong id="valSubCpuPeak">0.0</strong>% • GPU: <strong id="valSubGpuPct">0.0</strong>%
+            </div>
+        </div>
+        <div class="metric-card card-ram-mb">
+            <div class="metric-label">📥 RAM Usage (Subscriber)</div>
+            <div class="metric-value-container">
+                <span class="metric-value" id="valSubRamMb">0</span>
+                <span class="metric-unit">MB (<span id="valSubRamPct">0.0</span>%)</span>
+            </div>
+            <div class="metric-subtext" id="valSubRamTotal">Total Memori Sistem</div>
+        </div>
+        <div class="metric-card card-subteam">
+            <div class="metric-label">🧩 Beban Program Sub-Tim (Aktif)</div>
+            <div class="subteam-pills">
+                <div class="subteam-row">
+                    <span class="subteam-tag">🗣️ LLM (Talk):</span>
+                    <span id="valTeamLlm">0.0% • 0 MB</span>
+                </div>
+                <div class="subteam-row">
+                    <span class="subteam-tag">👁️ Vision/Gaze:</span>
+                    <span id="valTeamVision">0.0% • 0 MB</span>
+                </div>
+                <div class="subteam-row">
+                    <span class="subteam-tag">🧭 SDSC Nav:</span>
+                    <span id="valTeamSdsc">0.0% • 0 MB</span>
+                </div>
             </div>
         </div>
     </div>
@@ -1098,6 +1162,20 @@
     const valP95 = document.getElementById('valP95');
     const valP99 = document.getElementById('valP99');
     const valMissRate = document.getElementById('valMissRate');
+    const valPubCpuTemp = document.getElementById('valPubCpuTemp');
+    const valPubCpuPct = document.getElementById('valPubCpuPct');
+    const valPubRamPct = document.getElementById('valPubRamPct');
+    const valPubGpuTemp = document.getElementById('valPubGpuTemp');
+    const valSubCpuTemp = document.getElementById('valSubCpuTemp');
+    const valSubCpuPct = document.getElementById('valSubCpuPct');
+    const valSubCpuPeak = document.getElementById('valSubCpuPeak');
+    const valSubGpuPct = document.getElementById('valSubGpuPct');
+    const valSubRamMb = document.getElementById('valSubRamMb');
+    const valSubRamPct = document.getElementById('valSubRamPct');
+    const valSubRamTotal = document.getElementById('valSubRamTotal');
+    const valTeamLlm = document.getElementById('valTeamLlm');
+    const valTeamVision = document.getElementById('valTeamVision');
+    const valTeamSdsc = document.getElementById('valTeamSdsc');
     
     const statusBadge = document.getElementById('statusBadge');
     const statusText = document.getElementById('statusText');
@@ -1438,8 +1516,20 @@
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
             valPubCpuTemp.textContent = (c.pub_cpu_temp_c || 0).toFixed(1);
             valPubCpuPct.textContent = (c.pub_cpu_pct || 0).toFixed(1);
+            if (valPubRamPct) valPubRamPct.textContent = (c.pub_ram_pct || 0).toFixed(1);
+            if (valPubGpuTemp) valPubGpuTemp.textContent = (c.pub_gpu_temp_c || 0).toFixed(1);
             valSubCpuTemp.textContent = (c.sub_cpu_temp_c || 0).toFixed(1);
             valSubCpuPct.textContent = (c.sub_cpu_pct || 0).toFixed(1);
+            if (valSubCpuPeak) valSubCpuPeak.textContent = (c.sub_cpu_peak_pct !== undefined ? c.sub_cpu_peak_pct : (c.sub_cpu_pct || 0)).toFixed(1);
+            if (valSubGpuPct) valSubGpuPct.textContent = (c.sub_gpu_pct || 0).toFixed(1);
+            if (valSubRamMb) valSubRamMb.textContent = Math.round(c.sub_ram_used_mb || 0).toLocaleString();
+            if (valSubRamPct) valSubRamPct.textContent = (c.sub_ram_pct || 0).toFixed(1);
+            if (valSubRamTotal && c.sub_ram_total_mb) {
+                valSubRamTotal.textContent = `Dari kapasitas ${(c.sub_ram_total_mb / 1024).toFixed(1)} GB RAM`;
+            }
+            if (valTeamLlm) valTeamLlm.textContent = `${(c.llm_cpu_pct || 0).toFixed(1)}% • ${Math.round(c.llm_ram_mb || 0)} MB`;
+            if (valTeamVision) valTeamVision.textContent = `${(c.vision_cpu_pct || 0).toFixed(1)}% • ${Math.round(c.vision_ram_mb || 0)} MB`;
+            if (valTeamSdsc) valTeamSdsc.textContent = `${(c.sdsc_cpu_pct || 0).toFixed(1)}% • ${Math.round(c.sdsc_ram_mb || 0)} MB`;
 
             // Clock Skew Warning
             if (c.clock_skew || c.negative_count > 0) {

@@ -10,6 +10,7 @@ import json
 import statistics
 import threading
 import os
+import html
 from datetime import datetime
 from typing import List, Dict, Any
 from collections import deque
@@ -48,6 +49,190 @@ def calculate_percentile(data: list, p: float) -> float:
 
 _last_cpu_idle = 0.0
 _last_cpu_total = 0.0
+
+_fast_cpu_idle = 0.0
+_fast_cpu_total = 0.0
+_fast_cpu_samples: List[float] = []
+_fast_gpu_samples: List[float] = []
+
+_JETSON_GPU_LOAD_PATHS = (
+    "/sys/devices/platform/bus@0/17000000.gpu/load",
+    "/sys/devices/platform/17000000.ga10b/load",
+    "/sys/devices/gpu.0/load",
+    "/sys/devices/platform/gpu.0/load",
+)
+_detected_gpu_load_path = None
+for _p in _JETSON_GPU_LOAD_PATHS:
+    if os.path.exists(_p):
+        _detected_gpu_load_path = _p
+        break
+
+_PID_CACHE: Dict[str, set] = {"llm": set(), "vision": set(), "sdsc": set()}
+_last_pid_scan_ts = 0.0
+_last_pid_ticks: Dict[int, float] = {}
+_last_bucket_total_ticks = 0.0
+try:
+    _PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
+except Exception:
+    _PAGE_SIZE = 4096
+
+
+def read_jetson_gpu_pct() -> float:
+    """Read NVIDIA Jetson GPU load (0.0 - 100.0%) directly from kernel sysfs without jtop."""
+    if not _detected_gpu_load_path:
+        return 0.0
+    try:
+        with open(_detected_gpu_load_path, "r") as f:
+            val = float(f.read().strip())
+        return round(max(0.0, min(100.0, val / 10.0)), 1)
+    except Exception:
+        return 0.0
+
+
+def sample_fast_metrics() -> None:
+    """Lightweight 200ms (5 Hz) sampler to capture transient CPU/GPU spikes."""
+    global _fast_cpu_idle, _fast_cpu_total
+    try:
+        if os.path.exists("/proc/stat"):
+            with open("/proc/stat", "r") as f:
+                first_line = f.readline()
+            fields = [float(x) for x in first_line.split()[1:]]
+            if len(fields) >= 5:
+                idle = fields[3] + fields[4]
+                total = sum(fields)
+                idle_delta = idle - _fast_cpu_idle
+                total_delta = total - _fast_cpu_total
+                _fast_cpu_idle = idle
+                _fast_cpu_total = total
+                if total_delta > 0:
+                    pct = round(max(0.0, min(100.0, (1.0 - idle_delta / total_delta) * 100.0)), 1)
+                    _fast_cpu_samples.append(pct)
+    except Exception:
+        pass
+
+    gpu_now = read_jetson_gpu_pct()
+    if gpu_now > 0.0:
+        _fast_gpu_samples.append(gpu_now)
+
+
+def get_process_buckets() -> dict:
+    """Lightweight PID-cached per-team resource profiler (LLM, Vision/Gaze, SDSC)."""
+    global _last_pid_scan_ts, _last_bucket_total_ticks
+    now = time.time()
+    my_pid = os.getpid()
+
+    # 1. Refresh PID cache every 3.0 seconds
+    if (now - _last_pid_scan_ts) >= 3.0 and os.path.exists("/proc"):
+        _last_pid_scan_ts = now
+        new_cache: Dict[str, set] = {"llm": set(), "vision": set(), "sdsc": set()}
+        try:
+            for entry in os.listdir("/proc"):
+                if not entry.isdigit():
+                    continue
+                pid = int(entry)
+                if pid == my_pid or pid < 300:
+                    continue
+                try:
+                    with open(f"/proc/{pid}/cmdline", "rb") as cf:
+                        raw_cmd = cf.read(512)
+                    if not raw_cmd:
+                        continue
+                    parts = [p.decode("utf-8", errors="ignore") for p in raw_cmd.split(b"\x00") if p]
+                    if not parts:
+                        continue
+                    exe_base = os.path.basename(parts[0]).lower()
+                    if exe_base in ("sh", "bash", "dash", "zsh", "sudo", "ssh", "sshd", "su"):
+                        continue
+                    cmd_str = " ".join(parts).lower()
+                    if "network_monitor" in cmd_str or "dummy_publisher" in cmd_str:
+                        continue
+
+                    if any(k in cmd_str for k in (
+                        "human_detection", "social_force", "jetson_robot_bridge",
+                        "usb_bridge", "social_avoidance", "bluetooth_sdsc", "sdsc"
+                    )):
+                        new_cache["sdsc"].add(pid)
+                    elif any(k in cmd_str for k in (
+                        "brone_talk", "brone-talk", "ollama", "llama-server",
+                        "llama_server", "whisper", "piper", "bge-m3",
+                        "bge-reranker", "lfm2", "sherpa"
+                    )):
+                        new_cache["llm"].add(pid)
+                    elif any(k in cmd_str for k in (
+                        "gaze", "head_control", "realsense", "usb_cam",
+                        "camera_hal", "civitas", "yolo", "tracker",
+                        "face_det", "ball_tracker", "vision"
+                    )):
+                        new_cache["vision"].add(pid)
+                except Exception:
+                    continue
+            _PID_CACHE["llm"] = new_cache["llm"]
+            _PID_CACHE["vision"] = new_cache["vision"]
+            _PID_CACHE["sdsc"] = new_cache["sdsc"]
+        except Exception:
+            pass
+
+    # 2. Read total CPU jiffies delta for normalization (0-100% total system scale)
+    total_cpu_ticks = 0.0
+    try:
+        if os.path.exists("/proc/stat"):
+            with open("/proc/stat", "r") as f:
+                fields = [float(x) for x in f.readline().split()[1:]]
+            total_cpu_ticks = sum(fields)
+    except Exception:
+        pass
+
+    total_ticks_delta = total_cpu_ticks - _last_bucket_total_ticks
+    _last_bucket_total_ticks = total_cpu_ticks
+
+    result = {
+        "llm_cpu_pct": 0.0,
+        "llm_ram_mb": 0.0,
+        "vision_cpu_pct": 0.0,
+        "vision_ram_mb": 0.0,
+        "sdsc_cpu_pct": 0.0,
+        "sdsc_ram_mb": 0.0,
+    }
+
+    active_pids = set()
+    for bucket in ("llm", "vision", "sdsc"):
+        b_cpu_ticks = 0.0
+        b_ram_bytes = 0
+        dead_pids = []
+        for pid in list(_PID_CACHE[bucket]):
+            try:
+                with open(f"/proc/{pid}/stat", "r") as sf:
+                    s_data = sf.read()
+                rpar = s_data.rfind(")")
+                if rpar != -1:
+                    after = s_data[rpar + 2:].split()
+                    proc_ticks = float(after[11]) + float(after[12])
+                    prev_ticks = _last_pid_ticks.get(pid, proc_ticks)
+                    b_cpu_ticks += max(0.0, proc_ticks - prev_ticks)
+                    _last_pid_ticks[pid] = proc_ticks
+                    active_pids.add(pid)
+
+                with open(f"/proc/{pid}/statm", "r") as mf:
+                    m_parts = mf.read().split()
+                    if len(m_parts) >= 2:
+                        b_ram_bytes += int(m_parts[1]) * _PAGE_SIZE
+            except Exception:
+                dead_pids.append(pid)
+
+        for dp in dead_pids:
+            _PID_CACHE[bucket].discard(dp)
+            _last_pid_ticks.pop(dp, None)
+
+        if total_ticks_delta > 0:
+            pct = (b_cpu_ticks / total_ticks_delta) * 100.0
+            result[f"{bucket}_cpu_pct"] = round(max(0.0, min(100.0, pct)), 1)
+        result[f"{bucket}_ram_mb"] = round(b_ram_bytes / (1024.0 * 1024.0), 1)
+
+    for old_pid in list(_last_pid_ticks.keys()):
+        if old_pid not in active_pids:
+            _last_pid_ticks.pop(old_pid, None)
+
+    return result
 
 
 def get_system_health() -> dict:
@@ -137,14 +322,34 @@ def get_system_health() -> dict:
     except Exception:
         pass
 
+    cpu_peak_pct = max(_fast_cpu_samples + [cpu_pct]) if _fast_cpu_samples else cpu_pct
+    _fast_cpu_samples.clear()
+
+    gpu_now = read_jetson_gpu_pct()
+    gpu_pct = max(_fast_gpu_samples + [gpu_now]) if _fast_gpu_samples else gpu_now
+    _fast_gpu_samples.clear()
+
+    buckets = get_process_buckets()
+
     return {
         "cpu_temp_c": round(cpu_temp, 1),
         "gpu_temp_c": round(gpu_temp, 1),
         "cpu_pct": cpu_pct,
+        "cpu_peak_pct": round(cpu_peak_pct, 1),
+        "gpu_pct": round(gpu_pct, 1),
         "ram_used_mb": ram_used_mb,
         "ram_total_mb": ram_total_mb,
-        "ram_pct": ram_pct
+        "ram_pct": ram_pct,
+        **buckets,
     }
+
+
+# Warm up initial CPU stats so first sample doesn't report 0.0%
+try:
+    sample_fast_metrics()
+    get_system_health()
+except Exception:
+    pass
 
 
 class MonitorNode(Node):
@@ -222,8 +427,17 @@ class MonitorNode(Node):
             'sub_cpu_temp_c': sys_health_init['cpu_temp_c'],
             'sub_gpu_temp_c': sys_health_init['gpu_temp_c'],
             'sub_cpu_pct': sys_health_init['cpu_pct'],
+            'sub_cpu_peak_pct': sys_health_init['cpu_peak_pct'],
+            'sub_gpu_pct': sys_health_init['gpu_pct'],
             'sub_ram_used_mb': sys_health_init['ram_used_mb'],
+            'sub_ram_total_mb': sys_health_init['ram_total_mb'],
             'sub_ram_pct': sys_health_init['ram_pct'],
+            'llm_cpu_pct': sys_health_init['llm_cpu_pct'],
+            'llm_ram_mb': sys_health_init['llm_ram_mb'],
+            'vision_cpu_pct': sys_health_init['vision_cpu_pct'],
+            'vision_ram_mb': sys_health_init['vision_ram_mb'],
+            'sdsc_cpu_pct': sys_health_init['sdsc_cpu_pct'],
+            'sdsc_ram_mb': sys_health_init['sdsc_ram_mb'],
         }
         
         self._history = deque(maxlen=3600)  # Support up to 1 hour test
@@ -242,13 +456,102 @@ class MonitorNode(Node):
         self.create_subscription(UInt8MultiArray, topic_name, self._listener_callback, qos_profile)
         self.create_subscription(String, '/brone/command', self._command_callback, 10)
         self.create_subscription(String, '/brone/event_marker', self._command_callback, 10)
+        self.create_timer(0.2, sample_fast_metrics)
         self.create_timer(report_interval, self._report_callback)
+
+        # Zero-dependency background MQTT listener for brone_talk voice_stage auto-markers
+        self._mqtt_thread = threading.Thread(target=self._mqtt_voice_stage_listener, daemon=True)
+        self._mqtt_thread.start()
 
     def _command_callback(self, msg):
         """Auto-record event marker from robot CLI commands."""
         if self._is_recording:
             label = f"CMD: {msg.data.strip()}"
             self.add_event(label)
+
+    def _mqtt_voice_stage_listener(self):
+        """Zero-dependency raw socket MQTT 3.1.1 listener for robot/voice_stage (brone_talk)."""
+        import socket
+        brokers = [os.environ.get("BRONE_MQTT_BROKER", "192.168.100.2"), "127.0.0.1"]
+        port = int(os.environ.get("BRONE_MQTT_PORT", "1883"))
+        broker_idx = 0
+
+        while True:
+            host = brokers[broker_idx % len(brokers)]
+            broker_idx += 1
+            sock = None
+            try:
+                sock = socket.create_connection((host, port), timeout=5.0)
+                sock.settimeout(20.0)
+                sock.sendall(b"\x10\x14\x00\x04MQTT\x04\x02\x00<\x00\x08brone_qc")
+                connack = sock.recv(4)
+                if len(connack) < 4 or connack[0] != 0x20 or connack[3] != 0x00:
+                    sock.close()
+                    time.sleep(5.0)
+                    continue
+
+                sock.sendall(b"\x82\x16\x00\x01\x00\x11robot/voice_stage\x00")
+                self.get_logger().info(f"🎙️ [MQTT AUTO-MARKER] Terhubung ke broker {host}:{port} (robot/voice_stage)")
+
+                while True:
+                    try:
+                        b0 = sock.recv(1)
+                        if not b0:
+                            break
+                        pkt_type = b0[0] & 0xF0
+                        rem_len = 0
+                        mult = 1
+                        while True:
+                            rb = sock.recv(1)
+                            if not rb:
+                                raise ConnectionError("EOF")
+                            rem_len += (rb[0] & 0x7F) * mult
+                            if (rb[0] & 0x80) == 0:
+                                break
+                            mult *= 128
+
+                        body = b""
+                        while len(body) < rem_len:
+                            chunk = sock.recv(rem_len - len(body))
+                            if not chunk:
+                                raise ConnectionError("EOF")
+                            body += chunk
+
+                        if pkt_type == 0x30 and len(body) >= 2:
+                            t_len = struct.unpack("!H", body[:2])[0]
+                            pos = 2 + t_len
+                            if (b0[0] & 0x06) != 0:
+                                pos += 2
+                            payload_str = body[pos:].decode("utf-8", errors="ignore")
+                            if self._is_recording and payload_str:
+                                data = json.loads(payload_str)
+                                stage = data.get("stage", "")
+                                state = data.get("state", "")
+                                ms = data.get("ms", 0)
+                                if stage == "listening" and state == "speech":
+                                    self.add_event("🗣️ VOICE: Ucapan Terdeteksi")
+                                elif stage == "stt" and state == "done":
+                                    mdl = data.get("model", "stt")
+                                    self.add_event(f"🎙️ STT Selesai ({ms} ms, {mdl})")
+                                elif stage == "llm" and state == "done":
+                                    route = data.get("route", "llm")
+                                    self.add_event(f"🧠 LLM/RAG Selesai ({ms} ms, {route})")
+                                elif stage == "tts" and state == "done":
+                                    self.add_event(f"🔊 TTS Piper Selesai ({ms} ms)")
+                                elif stage == "error":
+                                    det = data.get("detail", "")
+                                    self.add_event(f"⚠️ VOICE ERR ({state}): {det}")
+                    except socket.timeout:
+                        sock.sendall(b"\xc0\x00")
+            except Exception:
+                pass
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+            time.sleep(5.0)
 
     def add_event(self, label):
         """Record an event marker at current second."""
@@ -337,8 +640,17 @@ class MonitorNode(Node):
                 'sub_cpu_temp_c': sys_health_reset['cpu_temp_c'],
                 'sub_gpu_temp_c': sys_health_reset['gpu_temp_c'],
                 'sub_cpu_pct': sys_health_reset['cpu_pct'],
+                'sub_cpu_peak_pct': sys_health_reset['cpu_peak_pct'],
+                'sub_gpu_pct': sys_health_reset['gpu_pct'],
                 'sub_ram_used_mb': sys_health_reset['ram_used_mb'],
+                'sub_ram_total_mb': sys_health_reset['ram_total_mb'],
                 'sub_ram_pct': sys_health_reset['ram_pct'],
+                'llm_cpu_pct': sys_health_reset['llm_cpu_pct'],
+                'llm_ram_mb': sys_health_reset['llm_ram_mb'],
+                'vision_cpu_pct': sys_health_reset['vision_cpu_pct'],
+                'vision_ram_mb': sys_health_reset['vision_ram_mb'],
+                'sdsc_cpu_pct': sys_health_reset['sdsc_cpu_pct'],
+                'sdsc_ram_mb': sys_health_reset['sdsc_ram_mb'],
             }
             self.get_logger().info("🔄 [BENCHMARK RESET] Sesi di-reset ke status STANDBY")
 
@@ -394,8 +706,26 @@ class MonitorNode(Node):
         now = time.time()
         self._live_feed_connected = (now - self._last_msg_recv_time) < 2.0
         
-        # If IDLE or COMPLETED, just maintain keep-alive
+        # If IDLE or COMPLETED, still refresh live hardware & sub-team metrics on the dashboard
         if not self._is_recording:
+            sys_health = get_system_health()
+            with self._lock:
+                self._current_stats.update({
+                    'sub_cpu_temp_c': sys_health['cpu_temp_c'],
+                    'sub_gpu_temp_c': sys_health['gpu_temp_c'],
+                    'sub_cpu_pct': sys_health['cpu_pct'],
+                    'sub_cpu_peak_pct': sys_health['cpu_peak_pct'],
+                    'sub_gpu_pct': sys_health['gpu_pct'],
+                    'sub_ram_used_mb': sys_health['ram_used_mb'],
+                    'sub_ram_total_mb': sys_health['ram_total_mb'],
+                    'sub_ram_pct': sys_health['ram_pct'],
+                    'llm_cpu_pct': sys_health['llm_cpu_pct'],
+                    'llm_ram_mb': sys_health['llm_ram_mb'],
+                    'vision_cpu_pct': sys_health['vision_cpu_pct'],
+                    'vision_ram_mb': sys_health['vision_ram_mb'],
+                    'sdsc_cpu_pct': sys_health['sdsc_cpu_pct'],
+                    'sdsc_ram_mb': sys_health['sdsc_ram_mb'],
+                })
             return
             
         self._session_elapsed = int(now - self._session_start_time)
@@ -464,8 +794,17 @@ class MonitorNode(Node):
             'sub_cpu_temp_c': sys_health['cpu_temp_c'],
             'sub_gpu_temp_c': sys_health['gpu_temp_c'],
             'sub_cpu_pct': sys_health['cpu_pct'],
+            'sub_cpu_peak_pct': sys_health['cpu_peak_pct'],
+            'sub_gpu_pct': sys_health['gpu_pct'],
             'sub_ram_used_mb': sys_health['ram_used_mb'],
+            'sub_ram_total_mb': sys_health['ram_total_mb'],
             'sub_ram_pct': sys_health['ram_pct'],
+            'llm_cpu_pct': sys_health['llm_cpu_pct'],
+            'llm_ram_mb': sys_health['llm_ram_mb'],
+            'vision_cpu_pct': sys_health['vision_cpu_pct'],
+            'vision_ram_mb': sys_health['vision_ram_mb'],
+            'sdsc_cpu_pct': sys_health['sdsc_cpu_pct'],
+            'sdsc_ram_mb': sys_health['sdsc_ram_mb'],
         }
         
         with self._lock:
@@ -532,18 +871,31 @@ class MonitorNode(Node):
             peak_sub_cpu_temp = max(sub_cpu_temps) if sub_cpu_temps else 0.0
             peak_pub_cpu_pct = max([h.get('pub_cpu_pct', 0) for h in self._history] or [0])
             peak_sub_cpu_pct = max([h.get('sub_cpu_pct', 0) for h in self._history] or [0])
+            peak_sub_cpu_peak_pct = max([h.get('sub_cpu_peak_pct', h.get('sub_cpu_pct', 0)) for h in self._history] or [0])
+            peak_sub_ram_mb = max([h.get('sub_ram_used_mb', 0) for h in self._history] or [0])
+            peak_sub_gpu_pct = max([h.get('sub_gpu_pct', 0) for h in self._history] or [0])
+            peak_llm_cpu_pct = max([h.get('llm_cpu_pct', 0) for h in self._history] or [0])
+            peak_llm_ram_mb = max([h.get('llm_ram_mb', 0) for h in self._history] or [0])
+            peak_vision_cpu_pct = max([h.get('vision_cpu_pct', 0) for h in self._history] or [0])
+            peak_vision_ram_mb = max([h.get('vision_ram_mb', 0) for h in self._history] or [0])
+            peak_sdsc_cpu_pct = max([h.get('sdsc_cpu_pct', 0) for h in self._history] or [0])
+            peak_sdsc_ram_mb = max([h.get('sdsc_ram_mb', 0) for h in self._history] or [0])
 
             header = [
                 "session_timestamp", "topology", "freq_hz", "payload_size_bytes", "qos_profile",
                 "total_samples", "total_expected", "total_gaps",
                 "miss_rate_percent", "avg_lat_ms", "min_lat_ms", "max_lat_ms", "p95_lat_ms", "p99_lat_ms",
-                "peak_pub_cpu_temp_c", "peak_pub_cpu_pct", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct"
+                "peak_pub_cpu_temp_c", "peak_pub_cpu_pct", "peak_sub_cpu_temp_c", "peak_sub_cpu_pct",
+                "peak_sub_cpu_peak_pct", "peak_sub_ram_mb", "peak_sub_gpu_pct",
+                "peak_llm_cpu_pct", "peak_llm_ram_mb", "peak_vision_cpu_pct", "peak_vision_ram_mb", "peak_sdsc_cpu_pct", "peak_sdsc_ram_mb"
             ]
             row = [
                 iso_ts, topology, freq_hz, self._last_payload_size, qos_str,
                 total_samples, total_expected, total_gaps,
                 round(miss_rate, 2), round(avg_lat, 3), round(min_lat, 3), round(max_lat, 3), round(p95_lat, 3), round(p99_lat, 3),
-                peak_pub_cpu_temp, peak_pub_cpu_pct, peak_sub_cpu_temp, peak_sub_cpu_pct
+                peak_pub_cpu_temp, peak_pub_cpu_pct, peak_sub_cpu_temp, peak_sub_cpu_pct,
+                peak_sub_cpu_peak_pct, peak_sub_ram_mb, peak_sub_gpu_pct,
+                peak_llm_cpu_pct, peak_llm_ram_mb, peak_vision_cpu_pct, peak_vision_ram_mb, peak_sdsc_cpu_pct, peak_sdsc_ram_mb
             ]
             
             filename = f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv"
@@ -559,7 +911,9 @@ class MonitorNode(Node):
                 hist_header = [
                     "timestamp_iso", "hz", "samples_in_window", "avg_lat_ms", "min_lat_ms", "max_lat_ms",
                     "p95_lat_ms", "p99_lat_ms", "miss_rate_pct", "total_accumulated",
-                    "pub_cpu_temp_c", "pub_cpu_pct", "sub_cpu_temp_c", "sub_cpu_pct", "sub_ram_pct"
+                    "pub_cpu_temp_c", "pub_cpu_pct", "sub_cpu_temp_c", "sub_cpu_pct", "sub_ram_pct",
+                    "sub_cpu_peak_pct", "sub_ram_used_mb", "sub_gpu_pct",
+                    "llm_cpu_pct", "llm_ram_mb", "vision_cpu_pct", "vision_ram_mb", "sdsc_cpu_pct", "sdsc_ram_mb"
                 ]
                 writer.writerow(hist_header)
                 for h in self._history:
@@ -567,7 +921,9 @@ class MonitorNode(Node):
                     writer.writerow([
                         h_ts, h.get('hz', 0), h.get('count', 0), h.get('avg_lat', 0), h.get('min_lat', 0),
                         h.get('max_lat', 0), h.get('p95_lat', 0), h.get('p99_lat', 0), h.get('miss_rate_percent', 0), h.get('total', 0),
-                        h.get('pub_cpu_temp_c', 0), h.get('pub_cpu_pct', 0), h.get('sub_cpu_temp_c', 0), h.get('sub_cpu_pct', 0), h.get('sub_ram_pct', 0)
+                        h.get('pub_cpu_temp_c', 0), h.get('pub_cpu_pct', 0), h.get('sub_cpu_temp_c', 0), h.get('sub_cpu_pct', 0), h.get('sub_ram_pct', 0),
+                        h.get('sub_cpu_peak_pct', h.get('sub_cpu_pct', 0)), h.get('sub_ram_used_mb', 0), h.get('sub_gpu_pct', 0),
+                        h.get('llm_cpu_pct', 0), h.get('llm_ram_mb', 0), h.get('vision_cpu_pct', 0), h.get('vision_ram_mb', 0), h.get('sdsc_cpu_pct', 0), h.get('sdsc_ram_mb', 0)
                     ])
                     
             return filename, output.getvalue()
@@ -605,14 +961,27 @@ class MonitorNode(Node):
             history_list = list(self._history)
             events_list = list(self._events)
             
-            cpu_temps = [h.get('cpu_temp_c', 0) for h in history_list if h.get('cpu_temp_c', 0) > 0]
+            cpu_temps = [h.get('sub_cpu_temp_c', 0) for h in history_list if h.get('sub_cpu_temp_c', 0) > 0]
             peak_cpu_temp = max(cpu_temps) if cpu_temps else 0.0
-            gpu_temps = [h.get('gpu_temp_c', 0) for h in history_list if h.get('gpu_temp_c', 0) > 0]
+            gpu_temps = [h.get('sub_gpu_temp_c', 0) for h in history_list if h.get('sub_gpu_temp_c', 0) > 0]
             peak_gpu_temp = max(gpu_temps) if gpu_temps else 0.0
-            cpu_usages = [h.get('cpu_pct', 0) for h in history_list]
+            cpu_usages = [h.get('sub_cpu_pct', 0) for h in history_list]
             peak_cpu_pct = max(cpu_usages) if cpu_usages else 0.0
-            ram_pcts = [h.get('ram_pct', 0) for h in history_list]
+            cpu_peaks = [h.get('sub_cpu_peak_pct', h.get('sub_cpu_pct', 0)) for h in history_list]
+            peak_cpu_peak_pct = max(cpu_peaks) if cpu_peaks else 0.0
+            ram_pcts = [h.get('sub_ram_pct', 0) for h in history_list]
             peak_ram_pct = max(ram_pcts) if ram_pcts else 0.0
+            ram_mbs = [h.get('sub_ram_used_mb', 0) for h in history_list]
+            peak_ram_mb = max(ram_mbs) if ram_mbs else 0.0
+            sub_ram_total_mb = self._current_stats.get('sub_ram_total_mb', 0.0)
+            gpu_pcts = [h.get('sub_gpu_pct', 0) for h in history_list]
+            peak_gpu_pct = max(gpu_pcts) if gpu_pcts else 0.0
+            peak_llm_cpu_pct = max([h.get('llm_cpu_pct', 0) for h in history_list] or [0.0])
+            peak_llm_ram_mb = max([h.get('llm_ram_mb', 0) for h in history_list] or [0.0])
+            peak_vision_cpu_pct = max([h.get('vision_cpu_pct', 0) for h in history_list] or [0.0])
+            peak_vision_ram_mb = max([h.get('vision_ram_mb', 0) for h in history_list] or [0.0])
+            peak_sdsc_cpu_pct = max([h.get('sdsc_cpu_pct', 0) for h in history_list] or [0.0])
+            peak_sdsc_ram_mb = max([h.get('sdsc_ram_mb', 0) for h in history_list] or [0.0])
 
             report_data = {
                 'filename': f"brone_log_{topology}_{int(freq_hz)}hz_{self._last_payload_size}b_{qos_str}_{ts_str}.csv",
@@ -636,7 +1005,16 @@ class MonitorNode(Node):
                     'peak_cpu_temp_c': peak_cpu_temp,
                     'peak_gpu_temp_c': peak_gpu_temp,
                     'peak_cpu_pct': peak_cpu_pct,
+                    'peak_cpu_peak_pct': peak_cpu_peak_pct,
                     'peak_ram_pct': peak_ram_pct,
+                    'peak_ram_mb': peak_ram_mb,
+                    'peak_gpu_pct': peak_gpu_pct,
+                    'peak_llm_cpu_pct': peak_llm_cpu_pct,
+                    'peak_llm_ram_mb': peak_llm_ram_mb,
+                    'peak_vision_cpu_pct': peak_vision_cpu_pct,
+                    'peak_vision_ram_mb': peak_vision_ram_mb,
+                    'peak_sdsc_cpu_pct': peak_sdsc_cpu_pct,
+                    'peak_sdsc_ram_mb': peak_sdsc_ram_mb,
                 },
                 'history': history_list,
                 'events': events_list
@@ -820,10 +1198,37 @@ class MonitorNode(Node):
     </div>
 </div>
 
+<div class="metrics-grid" style="margin-top: -6px;">
+    <div class="metric-card">
+        <div class="metric-label">Peak CPU (1s Avg / 200ms Spike)</div>
+        <div class="metric-val" style="font-size: 20px;">{peak_cpu_pct:.1f}% <span class="metric-unit">/ Peak: {peak_cpu_peak_pct:.1f}%</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Peak RAM Usage</div>
+        <div class="metric-val" style="font-size: 20px;">{peak_ram_mb:.0f} <span class="metric-unit">/ {sub_ram_total_mb:.0f} MB ({peak_ram_pct:.1f}%)</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Peak Suhu / GPU Load</div>
+        <div class="metric-val" style="font-size: 20px;">{peak_cpu_temp:.1f}°C <span class="metric-unit">/ GPU: {peak_gpu_pct:.1f}%</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Peak Sub-Tim: LLM (brone_talk)</div>
+        <div class="metric-val" style="font-size: 20px; color: var(--accent-blue);">{peak_llm_cpu_pct:.1f}% <span class="metric-unit">/ {peak_llm_ram_mb:.0f} MB</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Peak Sub-Tim: Vision / Gaze</div>
+        <div class="metric-val" style="font-size: 20px; color: var(--accent-teal);">{peak_vision_cpu_pct:.1f}% <span class="metric-unit">/ {peak_vision_ram_mb:.0f} MB</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Peak Sub-Tim: SDSC</div>
+        <div class="metric-val" style="font-size: 20px; color: var(--accent-purple);">{peak_sdsc_cpu_pct:.1f}% <span class="metric-unit">/ {peak_sdsc_ram_mb:.0f} MB</span></div>
+    </div>
+</div>
+
 { f'''<div class="event-box">
     <h4>📌 Event / Perintah yang Ditandai Selama Pengujian</h4>
     <div class="event-list">
-        {''.join([f'<span class="event-pill">📌 t={e["second"]}s: {e["label"]}</span>' for e in events_list])}
+        {''.join([f'<span class="event-pill">📌 t={e["second"]}s: {html.escape(str(e["label"]))}</span>' for e in events_list])}
     </div>
 </div>''' if events_list else '' }
 
@@ -1069,10 +1474,14 @@ _monitor_node = None
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    pass
+    allow_reuse_address = True
+    daemon_threads = True
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        base_dir = Path(__file__).resolve().parent
+        super().__init__(*args, directory=str(base_dir), **kwargs)
     def do_GET(self):
         if self.path == '/api/stats':
             self.send_response(200)
