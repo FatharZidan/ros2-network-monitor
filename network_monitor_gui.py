@@ -62,8 +62,9 @@ _JETSON_GPU_LOAD_PATHS = (
     "/sys/devices/platform/bus@0/17000000.ga10b/load",
     "/sys/devices/platform/17000000.ga10b/load",
     "/sys/devices/platform/bus@0/17000000.gpu/load",
-) + tuple(glob.glob("/sys/devices/platform/**/*ga10b*/load", recursive=True)) \
-  + tuple(glob.glob("/sys/devices/platform/**/*.gpu/load", recursive=True))
+    "/sys/devices/platform/17000000.gpu/load",
+    "/sys/devices/platform/57000000.gpu/load",
+)
 _detected_gpu_load_path = None
 for _p in _JETSON_GPU_LOAD_PATHS:
     if os.path.exists(_p):
