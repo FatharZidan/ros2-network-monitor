@@ -5,6 +5,7 @@ from std_msgs.msg import UInt8MultiArray
 import argparse
 import struct
 import os
+import glob
 import time
 import threading
 import sys
@@ -27,10 +28,38 @@ def get_timestamp_ns(topology: str):
 _last_cpu_idle = 0.0
 _last_cpu_total = 0.0
 _fast_pub_cpu_samples = []
+_fast_pub_gpu_samples = []
+
+_JETSON_GPU_PATHS = (
+    "/sys/devices/gpu.0/load",
+    "/sys/devices/platform/gpu.0/load",
+    "/sys/devices/platform/bus@0/17000000.ga10b/load",
+    "/sys/devices/platform/17000000.ga10b/load",
+    "/sys/devices/platform/bus@0/17000000.gpu/load",
+) + tuple(glob.glob("/sys/devices/platform/**/*ga10b*/load", recursive=True)) \
+  + tuple(glob.glob("/sys/devices/platform/**/*.gpu/load", recursive=True))
+
+_detected_gpu_load_path = None
+for _p in _JETSON_GPU_PATHS:
+    if os.path.exists(_p):
+        _detected_gpu_load_path = _p
+        break
+
+
+def read_jetson_gpu_pct() -> float:
+    """Read NVIDIA Jetson GPU load (0.0 - 100.0%) directly from kernel sysfs."""
+    if not _detected_gpu_load_path:
+        return 0.0
+    try:
+        with open(_detected_gpu_load_path, "r") as f:
+            val = float(f.read().strip())
+        return round(max(0.0, min(100.0, val / 10.0)), 1)
+    except Exception:
+        return 0.0
 
 
 def sample_fast_pub_cpu() -> None:
-    """Lightweight 200ms (5 Hz) sampler on Publisher to capture transient CPU spikes."""
+    """Lightweight 200ms (5 Hz) sampler on Publisher to capture transient CPU & GPU spikes."""
     global _last_cpu_idle, _last_cpu_total
     try:
         if os.path.exists("/proc/stat"):
@@ -49,6 +78,10 @@ def sample_fast_pub_cpu() -> None:
                     _fast_pub_cpu_samples.append(pct)
     except Exception:
         pass
+
+    gpu_now = read_jetson_gpu_pct()
+    if gpu_now > 0.0:
+        _fast_pub_gpu_samples.append(gpu_now)
 
 
 def get_system_health() -> dict:
@@ -97,6 +130,10 @@ def get_system_health() -> dict:
         cpu_pct = max(_fast_pub_cpu_samples)
         _fast_pub_cpu_samples.clear()
 
+    gpu_now = read_jetson_gpu_pct()
+    gpu_pct = max(_fast_pub_gpu_samples + [gpu_now]) if _fast_pub_gpu_samples else gpu_now
+    _fast_pub_gpu_samples.clear()
+
     try:
         if os.path.exists("/proc/meminfo"):
             mem_info = {}
@@ -122,6 +159,7 @@ def get_system_health() -> dict:
         "cpu_temp_c": round(cpu_temp, 1),
         "gpu_temp_c": round(gpu_temp, 1),
         "cpu_pct": cpu_pct,
+        "gpu_pct": round(gpu_pct, 1),
         "ram_pct": ram_pct
     }
 
@@ -206,14 +244,15 @@ class DummyPublisher(Node):
             
         ts_ns = self.ts_func()
         
-        # 24-byte Header: seq (Q, 8b), ts_ns (q, 8b), cpu_temp*10 (H, 2b), gpu_temp*10 (H, 2b), cpu_pct*10 (H, 2b), ram_pct*10 (H, 2b)
+        # 26-byte Header: seq (Q, 8b), ts_ns (q, 8b), cpu_temp*10 (H), gpu_temp*10 (H), cpu_pct*10 (H), ram_pct*10 (H), gpu_pct*10 (H)
         h = self._cached_health
         c_temp_u16 = min(65535, max(0, int(h['cpu_temp_c'] * 10)))
         g_temp_u16 = min(65535, max(0, int(h['gpu_temp_c'] * 10)))
         c_pct_u16 = min(65535, max(0, int(h['cpu_pct'] * 10)))
         r_pct_u16 = min(65535, max(0, int(h['ram_pct'] * 10)))
+        g_pct_u16 = min(65535, max(0, int(h.get('gpu_pct', 0.0) * 10)))
         
-        header = struct.pack('!QqHHHH', self.seq, ts_ns, c_temp_u16, g_temp_u16, c_pct_u16, r_pct_u16)
+        header = struct.pack('!QqHHHHH', self.seq, ts_ns, c_temp_u16, g_temp_u16, c_pct_u16, r_pct_u16, g_pct_u16)
         padding_size = max(0, self.args.payload - len(header))
         payload_bytes = header + os.urandom(padding_size)
         

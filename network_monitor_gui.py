@@ -10,6 +10,7 @@ import json
 import statistics
 import threading
 import os
+import glob
 import html
 from datetime import datetime
 from typing import List, Dict, Any
@@ -56,11 +57,13 @@ _fast_cpu_samples: List[float] = []
 _fast_gpu_samples: List[float] = []
 
 _JETSON_GPU_LOAD_PATHS = (
-    "/sys/devices/platform/bus@0/17000000.gpu/load",
-    "/sys/devices/platform/17000000.ga10b/load",
     "/sys/devices/gpu.0/load",
     "/sys/devices/platform/gpu.0/load",
-)
+    "/sys/devices/platform/bus@0/17000000.ga10b/load",
+    "/sys/devices/platform/17000000.ga10b/load",
+    "/sys/devices/platform/bus@0/17000000.gpu/load",
+) + tuple(glob.glob("/sys/devices/platform/**/*ga10b*/load", recursive=True)) \
+  + tuple(glob.glob("/sys/devices/platform/**/*.gpu/load", recursive=True))
 _detected_gpu_load_path = None
 for _p in _JETSON_GPU_LOAD_PATHS:
     if os.path.exists(_p):
@@ -400,6 +403,7 @@ class MonitorNode(Node):
         self._last_pub_gpu_temp = 0.0
         self._last_pub_cpu_pct = 0.0
         self._last_pub_ram_pct = 0.0
+        self._last_pub_gpu_pct = 0.0
 
         sys_health_init = get_system_health()
         self._current_stats = {
@@ -424,6 +428,7 @@ class MonitorNode(Node):
             'pub_gpu_temp_c': 0.0,
             'pub_cpu_pct': 0.0,
             'pub_ram_pct': 0.0,
+            'pub_gpu_pct': 0.0,
             'sub_cpu_temp_c': sys_health_init['cpu_temp_c'],
             'sub_gpu_temp_c': sys_health_init['gpu_temp_c'],
             'sub_cpu_pct': sys_health_init['cpu_pct'],
@@ -614,6 +619,7 @@ class MonitorNode(Node):
             self._last_pub_gpu_temp = 0.0
             self._last_pub_cpu_pct = 0.0
             self._last_pub_ram_pct = 0.0
+            self._last_pub_gpu_pct = 0.0
             sys_health_reset = get_system_health()
             self._current_stats = {
                 'hz': 0.0,
@@ -637,6 +643,7 @@ class MonitorNode(Node):
                 'pub_gpu_temp_c': 0.0,
                 'pub_cpu_pct': 0.0,
                 'pub_ram_pct': 0.0,
+                'pub_gpu_pct': 0.0,
                 'sub_cpu_temp_c': sys_health_reset['cpu_temp_c'],
                 'sub_gpu_temp_c': sys_health_reset['gpu_temp_c'],
                 'sub_cpu_pct': sys_health_reset['cpu_pct'],
@@ -664,11 +671,14 @@ class MonitorNode(Node):
         self._last_msg_recv_time = now_ts
         self._live_feed_connected = True
         
-        # Only accumulate metrics if recording is active!
-        if not self._is_recording:
-            return
-            
-        if len(raw) >= 24:
+        if len(raw) >= 26:
+            seq, ts_ns, c_t, g_t, c_p, r_p, g_p = struct.unpack('!QqHHHHH', raw[:26])
+            self._last_pub_cpu_temp = c_t / 10.0
+            self._last_pub_gpu_temp = g_t / 10.0
+            self._last_pub_cpu_pct = c_p / 10.0
+            self._last_pub_ram_pct = r_p / 10.0
+            self._last_pub_gpu_pct = g_p / 10.0
+        elif len(raw) >= 24:
             seq, ts_ns, c_t, g_t, c_p, r_p = struct.unpack('!QqHHHH', raw[:24])
             self._last_pub_cpu_temp = c_t / 10.0
             self._last_pub_gpu_temp = g_t / 10.0
@@ -676,6 +686,10 @@ class MonitorNode(Node):
             self._last_pub_ram_pct = r_p / 10.0
         else:
             seq, ts_ns = struct.unpack('!Qq', raw[:16])
+
+        # Only accumulate latency metrics if recording is active!
+        if not self._is_recording:
+            return
 
         recv_ns = self._ts_func()
         latency_ms = (recv_ns - ts_ns) / 1_000_000.0
@@ -711,6 +725,11 @@ class MonitorNode(Node):
             sys_health = get_system_health()
             with self._lock:
                 self._current_stats.update({
+                    'pub_cpu_temp_c': self._last_pub_cpu_temp,
+                    'pub_gpu_temp_c': self._last_pub_gpu_temp,
+                    'pub_cpu_pct': self._last_pub_cpu_pct,
+                    'pub_ram_pct': self._last_pub_ram_pct,
+                    'pub_gpu_pct': self._last_pub_gpu_pct,
                     'sub_cpu_temp_c': sys_health['cpu_temp_c'],
                     'sub_gpu_temp_c': sys_health['gpu_temp_c'],
                     'sub_cpu_pct': sys_health['cpu_pct'],
@@ -791,6 +810,7 @@ class MonitorNode(Node):
             'pub_gpu_temp_c': self._last_pub_gpu_temp,
             'pub_cpu_pct': self._last_pub_cpu_pct,
             'pub_ram_pct': self._last_pub_ram_pct,
+            'pub_gpu_pct': self._last_pub_gpu_pct,
             'sub_cpu_temp_c': sys_health['cpu_temp_c'],
             'sub_gpu_temp_c': sys_health['gpu_temp_c'],
             'sub_cpu_pct': sys_health['cpu_pct'],

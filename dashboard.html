@@ -933,7 +933,7 @@
                 <span class="metric-unit">%</span>
             </div>
             <div class="metric-subtext">
-                RAM Publisher: <strong id="valPubRamPct">0.0</strong>% • GPU Suhu: <strong id="valPubGpuTemp">0.0</strong>°C
+                GPU Usage: <strong id="valPubGpuPct">0.0</strong>% • RAM: <strong id="valPubRamPct">0.0</strong>% • Suhu GPU: <strong id="valPubGpuTemp">0.0</strong>°C
             </div>
         </div>
 
@@ -951,7 +951,7 @@
                 <span class="metric-unit">%</span>
             </div>
             <div class="metric-subtext">
-                Peak (200ms): <strong id="valSubCpuPeak">0.0</strong>% • GPU: <strong id="valSubGpuPct">0.0</strong>%
+                Peak (200ms): <strong id="valSubCpuPeak">0.0</strong>% • GPU Usage: <strong id="valSubGpuPct">0.0</strong>%
             </div>
         </div>
         <div class="metric-card card-ram-mb">
@@ -1164,6 +1164,7 @@
     const valMissRate = document.getElementById('valMissRate');
     const valPubCpuTemp = document.getElementById('valPubCpuTemp');
     const valPubCpuPct = document.getElementById('valPubCpuPct');
+    const valPubGpuPct = document.getElementById('valPubGpuPct');
     const valPubRamPct = document.getElementById('valPubRamPct');
     const valPubGpuTemp = document.getElementById('valPubGpuTemp');
     const valSubCpuTemp = document.getElementById('valSubCpuTemp');
@@ -1516,6 +1517,7 @@
             valMissRate.textContent = (c.miss_rate_percent || 0).toFixed(2);
             valPubCpuTemp.textContent = (c.pub_cpu_temp_c || 0).toFixed(1);
             valPubCpuPct.textContent = (c.pub_cpu_pct || 0).toFixed(1);
+            if (valPubGpuPct) valPubGpuPct.textContent = (c.pub_gpu_pct || 0).toFixed(1);
             if (valPubRamPct) valPubRamPct.textContent = (c.pub_ram_pct || 0).toFixed(1);
             if (valPubGpuTemp) valPubGpuTemp.textContent = (c.pub_gpu_temp_c || 0).toFixed(1);
             valSubCpuTemp.textContent = (c.sub_cpu_temp_c || 0).toFixed(1);
